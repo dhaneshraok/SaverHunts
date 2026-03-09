@@ -1,0 +1,33 @@
+INFO:     Started server process [6957]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49900 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49906 - "POST /api/v1/search HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:49941 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50195 - "OPTIONS /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50195 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50197 - "POST /api/v1/search HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:50197 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50483 - "POST /api/v1/search HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:50483 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50525 - "POST /api/v1/search HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:50525 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50571 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50846 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51242 - "POST /api/v1/search HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:51242 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51311 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51375 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53610 - "OPTIONS /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53610 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53610 - "POST /api/v1/search HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [6957]
+bash: line 1:  6957 Terminated: 15          uvicorn main:app --port 8000

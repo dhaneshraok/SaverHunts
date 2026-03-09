@@ -1,0 +1,65 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.pytest_cache/
+
+# mobile / expo
+.expo/
+*.jks
+*.p8
+*.keystore
+*.alias
+ip-address.txt
+web-build/
+node_modules/
+
+# testing
+coverage
+.nyc_output
+
+# production
+build
+dist
+.next/
+
+# misc
+.DS_Store
+*.pem
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+*.env*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dump.rdb
+.gemini/
+.agents/
+.agent/
+_agents/
+_agent/
+brain/
+implementation_plan.md
+task.md
+walkthrough.md
+cto_vision.md
+phase_m_plan.md
+phase_n_plan.md
+phase_o_plan.md
+*.png
+*.webp
+*.jpg
+*.jpeg
+*.gif

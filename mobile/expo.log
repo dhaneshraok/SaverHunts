@@ -1,0 +1,184 @@
+Node.js (v20.16.0) is outdated and unsupported. Please update to a newer Node.js LTS version (required: >=20.19.4)
+Go to: https://nodejs.org/en/download
+
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_SUPABASE_URL
+Starting project at /Users/dhaneshrao/Documents/Projtects/SaverHunt/mobile
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@55.0.4 - expected version: ~55.0.5
+  expo-router@55.0.3 - expected version: ~55.0.4
+  expo-symbols@55.0.4 - expected version: ~55.0.5
+  @types/jest@30.0.0 - expected version: 29.5.14
+  jest@30.2.0 - expected version: ~29.7.0
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+λ Bundled 1995ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1797 modules)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1835/1835)
+Web Bundled 3569ms node_modules/expo-router/entry.js (1835 modules)
+Web Bundled 611ms node_modules/expo-router/entry.js (1790 modules)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 72ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 1143ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 72ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 418ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 2685ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 180ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 644ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 3907ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 118ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 603ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 2923ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 69ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 382ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 2016ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 126ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 957ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+Web Bundled 2396ms node_modules/expo-router/entry.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+AbortError: The operation was aborted
+    at EventTarget.abort (node:internal/streams/pipeline:208:16)
+    at EventTarget.[nodejs.internal.kHybridDispatch] (node:internal/event_target:820:20)
+    at EventTarget.dispatchEvent (node:internal/event_target:755:26)
+    at abortSignal (node:internal/abort_controller:370:10)
+    at AbortController.abort (node:internal/abort_controller:392:5)
+    at EventTarget.abort (node:internal/deps/undici/undici:9228:14)
+    at EventTarget.[nodejs.internal.kHybridDispatch] (node:internal/event_target:820:20)
+    at EventTarget.dispatchEvent (node:internal/event_target:755:26)
+    at abortSignal (node:internal/abort_controller:370:10)
+    at AbortController.abort (node:internal/abort_controller:392:5)
+    at ServerResponse.<anonymous> (/Users/dhaneshrao/Documents/Projtects/SaverHunt/node_modules/expo-server/src/vendor/http.ts:91:38)
+    at Object.onceWrapper (node:events:633:28)
+    at ServerResponse.emit (node:events:531:35)
+    at emitCloseNT (node:_http_server:1020:10)
+    at Socket.onServerResponseClose (node:_http_server:278:5)
+    at Socket.emit (node:events:531:35)
+    at TCP.<anonymous> (node:net:339:12)
+    at TCP.callbackTrampoline (node:internal/async_hooks:130:17)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 3374ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 4560ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 892ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 114ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 1632ms node_modules/expo-router/entry.js (1 module)
+AbortError: The operation was aborted
+    at EventTarget.abort (node:internal/streams/pipeline:208:16)
+    at EventTarget.[nodejs.internal.kHybridDispatch] (node:internal/event_target:820:20)
+    at EventTarget.dispatchEvent (node:internal/event_target:755:26)
+    at abortSignal (node:internal/abort_controller:370:10)
+    at AbortController.abort (node:internal/abort_controller:392:5)
+    at EventTarget.abort (node:internal/deps/undici/undici:9228:14)
+    at EventTarget.[nodejs.internal.kHybridDispatch] (node:internal/event_target:820:20)
+    at EventTarget.dispatchEvent (node:internal/event_target:755:26)
+    at abortSignal (node:internal/abort_controller:370:10)
+    at AbortController.abort (node:internal/abort_controller:392:5)
+    at ServerResponse.<anonymous> (/Users/dhaneshrao/Documents/Projtects/SaverHunt/node_modules/expo-server/src/vendor/http.ts:91:38)
+    at Object.onceWrapper (node:events:633:28)
+    at ServerResponse.emit (node:events:531:35)
+    at emitCloseNT (node:_http_server:1020:10)
+    at Socket.onServerResponseClose (node:_http_server:278:5)
+    at Socket.emit (node:events:531:35)
+    at TCP.<anonymous> (node:net:339:12)
+    at TCP.callbackTrampoline (node:internal/async_hooks:130:17)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 112ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 1608ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 82ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 358ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 2569ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 476ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 1365ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 4831ms node_modules/expo-router/entry.js (1 module)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 6825ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. 
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 10290ms node_modules/expo-router/entry.js (1 module)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 2822ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+λ Bundled 337ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+Web Bundled 1865ms node_modules/expo-router/entry.js (1 module)
+λ  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. 
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 223ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Unable to resolve "@react-native-async-storage/async-storage" from "mobile/store/cartStore.ts"
+[0m [90m 1 |[39m [36mimport[39m { create } [36mfrom[39m [32m'zustand'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m { persist[33m,[39m createJSONStorage } [36mfrom[39m [32m'zustand/middleware'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m
+ [90m   |[39m                           [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m [36mexport[39m [36minterface[39m [33mCartItem[39m {
+ [90m 6 |[39m     id[33m:[39m string[33m;[39m [90m// The original product ID or generated ID[39m[0m
+
+Import stack:
+
+ mobile/store/cartStore.ts
+ | import "@react-native-async-storage/async-storage"
+
+ mobile/app/(tabs)/index.tsx
+ | import "../../store/cartStore"
+
+ mobile/app (require.context)
+
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 5196ms node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js (1 module)
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ  WARN  "shadow*" style props are deprecated. Use "boxShadow". 
+λ  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. 
+  factory (app/(tabs)/index.tsx:7:16)
+λ  WARN  props.pointerEvents is deprecated. Use style.pointerEvents 
+Web Bundled 6339ms node_modules/expo-router/entry.js (1 module)
+Web Bundled 257ms node_modules/expo-router/entry.js (1 module)
+/Users/dhaneshrao/Documents/Projtects/SaverHunt/node_modules/dnssd-advertise/dist/dnssd-advertise.js:2603
+      return async function announce() {
+                                    ^
+
+RangeError: Maximum call stack size exceeded
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v20.16.0

@@ -1,0 +1,605 @@
+ 
+ -------------- celery@Dhaneshs-Laptop.local v5.6.2 (recovery)
+--- ***** ----- 
+-- ******* ---- macOS-26.1-arm64-arm-64bit-Mach-O 2026-03-06 22:42:56
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         saverhunt_tasks:0x109ce8c20
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 8 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . tasks.scrapers.dummy_scrape
+
+[2026-03-06 22:42:56,496: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-03-06 22:42:56,498: INFO/MainProcess] mingle: searching for neighbors
+[2026-03-06 22:42:57,503: INFO/MainProcess] mingle: all alone
+[2026-03-06 22:42:57,518: INFO/MainProcess] celery@Dhaneshs-Laptop.local ready.
+[2026-03-06 22:43:14,507: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[78829fbd-9518-45eb-b193-b19a87e29354] received
+[2026-03-06 22:43:14,910: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptop "HTTP/1.1 200 OK"
+[2026-03-06 22:43:15,265: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptop "HTTP/1.1 200 OK"
+[2026-03-06 22:43:15,268: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptop "HTTP/1.1 200 OK"
+[2026-03-06 22:43:16,063: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,185: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,278: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,389: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,487: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,593: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,688: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,788: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,886: INFO/MainProcess] HTTP Request: POST https://pwmrjcjlmykqltmmguao.supabase.co/rest/v1/search_results "HTTP/2 201 Created"
+[2026-03-06 22:43:16,892: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[78829fbd-9518-45eb-b193-b19a87e29354] succeeded in 2.3835225829971023s: {'query': 'laptop', 'total_results': 9, 'best_price': {'price_inr': 116014.25, 'platform': 'Flipkart', 'title': 'Huawei Matebook X Pro', 'savings_from_max': 55210.29}, 'products': [{'title': 'Huawei Matebook X Pro', 'price_inr': 116014.25, 'image_url': 'https://cdn.dummyjson.com/product-images/laptops/huawei-matebook-x-pro/thumbnail.webp', 'product_url': 'https://dummyjson.com/products/80', 'platform': 'Flipkart', 'original_price_inr': 128051.05, 'discount_percent': 9.4, 'rating': 5.0}, {'title': 'Huawei Matebook X Pro', 'price_inr': 120041.16, 'image_url': 'https://cdn.dummyjson.com/product-images/laptops/huawei-matebook-x-pro/thumbnail.webp', 'product_url': 'https://dummyjson.com/products/80', 'platform': 'Amazon India', 'original_price_inr': 132495.76, 'discount_percent': 9.4, 'rating': 5.0}, {'title': 'Huawei Matebook X Pro', 'price_inr': 122696.14, 'image_url': 'https://cdn.dummyjson.com/product-images/laptops/huawei-matebook-x-pro/thumbnail.webp', 'product_url': 'https://dummyjson.com/products/80', 'plat...', ...}]}
+[2026-03-06 22:45:23,173: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[b7efdde1-b8b4-4854-b82d-32681fb4a39a] received
+[2026-03-06 22:45:23,606: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15 "HTTP/1.1 200 OK"
+[2026-03-06 22:45:23,608: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15 "HTTP/1.1 200 OK"
+[2026-03-06 22:45:23,948: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15 "HTTP/1.1 200 OK"
+[2026-03-06 22:45:23,965: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[b7efdde1-b8b4-4854-b82d-32681fb4a39a] succeeded in 0.7767832500103395s: {'query': 'iphone 15', 'total_results': 0, 'best_price': None, 'products': []}
+[2026-03-06 22:45:51,584: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[e982b461-e9fa-4833-86ee-88c9f22c77d5] received
+[2026-03-06 22:45:51,862: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:45:51,870: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:45:52,206: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:45:52,214: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[e982b461-e9fa-4833-86ee-88c9f22c77d5] succeeded in 0.6148735830211081s: {'query': 'iphonelaptop', 'total_results': 0, 'best_price': None, 'products': []}
+[2026-03-06 22:46:00,664: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[afbc2a95-ff9a-4882-ba91-8fd01dc6514d] received
+[2026-03-06 22:46:00,937: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptopiphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:46:00,947: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptopiphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:46:00,947: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptopiphonelaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:46:00,949: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[afbc2a95-ff9a-4882-ba91-8fd01dc6514d] succeeded in 0.28097324998816475s: {'query': 'laptopiphonelaptop', 'total_results': 0, 'best_price': None, 'products': []}
+[2026-03-06 22:48:34,402: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[c90cf000-7363-471b-9aa0-42c78cd4828c] received
+[2026-03-06 22:48:34,729: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptoplaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:48:34,732: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptoplaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:48:35,073: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=laptoplaptop "HTTP/1.1 200 OK"
+[2026-03-06 22:48:35,081: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[c90cf000-7363-471b-9aa0-42c78cd4828c] succeeded in 0.6669246669916902s: {'query': 'laptoplaptop', 'total_results': 0, 'best_price': None, 'products': []}
+[2026-03-06 23:01:02,771: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[a58ea986-c808-41c2-a050-3aef7febf061] received
+[2026-03-06 23:01:03,567: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15iPhone+15 "HTTP/1.1 200 OK"
+[2026-03-06 23:01:03,899: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15iPhone+15 "HTTP/1.1 200 OK"
+[2026-03-06 23:01:03,908: INFO/MainProcess] HTTP Request: GET https://dummyjson.com/products/search?q=iphone+15iPhone+15 "HTTP/1.1 200 OK"
+[2026-03-06 23:01:03,926: INFO/MainProcess] Task tasks.scrapers.dummy_scrape[a58ea986-c808-41c2-a050-3aef7febf061] succeeded in 1.14005383400945s: {'query': 'iphone 15iPhone 15', 'total_results': 0, 'best_price': None, 'products': []}
+[2026-03-08 14:48:35,987: WARNING/MainProcess] consumer: Connection to broker lost. Trying to re-establish the connection...
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 120, in call_with_retry
+    return do()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1115, in <lambda>
+    lambda: command(*args, **kwargs),
+            ~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1159, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1339, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/_parsers/socket.py", line 68, in _read_from_socket
+    raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
+redis.exceptions.ConnectionError: Connection closed by server.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 998, in connect_check_health
+    sock = self._connect()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1512, in _connect
+    raise err
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1496, in _connect
+    sock.connect(socket_address)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+ConnectionRefusedError: [Errno 61] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 788, in start
+    c.loop(*c.loop_args())
+    ~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/loops.py", line 96, in asynloop
+    next(loop)
+    ~~~~^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/asynchronous/hub.py", line 377, in create_loop
+    cb(*cbargs)
+    ~~^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/redis.py", line 1394, in on_readable
+    self.cycle.on_readable(fileno)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/redis.py", line 579, in on_readable
+    chan.handlers[type]()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/redis.py", line 931, in _receive
+    ret.append(self._receive_one(c))
+               ~~~~~~~~~~~~~~~~~^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/redis.py", line 941, in _receive_one
+    response = c.parse_response()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1161, in parse_response
+    response = self._execute(conn, try_read)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1114, in _execute
+    response = conn.retry.call_with_retry(
+        lambda: command(*args, **kwargs),
+        failure_callback,
+        with_failure_count=True,
+    )
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 127, in call_with_retry
+    fail(error, failures)
+    ~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1111, in failure_callback
+    self._reconnect(conn, error, failure_count, start_time, command_name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 1085, in _reconnect
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 976, in connect
+    self.retry.call_with_retry(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        lambda: self.connect_check_health(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        lambda error: self.disconnect(error),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 132, in call_with_retry
+    raise error
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 120, in call_with_retry
+    return do()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 977, in <lambda>
+    lambda: self.connect_check_health(
+            ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        check_health=True, retry_socket_connect=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ),
+    ^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1022, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error 61 connecting to localhost:6379. Connection refused.
+[2026-03-08 14:48:36,124: WARNING/MainProcess] /Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py:397: CPendingDeprecationWarning: 
+In Celery 5.1 we introduced an optional breaking change which
+on connection loss cancels all currently executed tasks with late acknowledgement enabled.
+These tasks cannot be acknowledged as the connection is gone, and the tasks are automatically redelivered
+back to the queue. You can enable this behavior using the worker_cancel_long_running_tasks_on_connection_loss
+setting. In Celery 5.1 it is set to False by default. The setting will be set to True by default in Celery 6.0.
+
+  warnings.warn(CANCEL_TASKS_BY_DEFAULT, CPendingDeprecationWarning)
+
+[2026-03-08 14:48:36,398: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 2.00 seconds... (1/100)
+
+[2026-03-08 14:48:38,556: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 4.00 seconds... (2/100)
+
+[2026-03-08 14:48:42,586: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 6.00 seconds... (3/100)
+
+[2026-03-08 14:48:48,617: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 8.00 seconds... (4/100)
+
+[2026-03-08 14:48:56,677: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 10.00 seconds... (5/100)
+
+[2026-03-08 14:49:06,731: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 12.00 seconds... (6/100)
+
+[2026-03-08 14:49:18,794: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 14.00 seconds... (7/100)
+
+[2026-03-08 14:49:32,853: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 16.00 seconds... (8/100)
+
+[2026-03-08 14:49:48,928: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 18.00 seconds... (9/100)
+
+[2026-03-08 14:50:07,007: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 20.00 seconds... (10/100)
+
+[2026-03-08 14:50:27,112: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 22.00 seconds... (11/100)
+
+[2026-03-08 14:50:49,226: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 24.00 seconds... (12/100)
+
+[2026-03-08 14:51:13,333: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 26.00 seconds... (13/100)
+
+[2026-03-08 14:51:39,448: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 28.00 seconds... (14/100)
+
+[2026-03-08 14:52:07,569: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 30.00 seconds... (15/100)
+
+[2026-03-08 14:52:37,700: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2026-03-08 14:53:09,824: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (17/100)
+
+[2026-03-08 14:53:41,959: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (18/100)
+
+[2026-03-08 14:54:14,032: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (19/100)
+
+[2026-03-08 14:54:46,158: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (20/100)
+
+[2026-03-08 14:55:18,306: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (21/100)
+
+[2026-03-08 14:55:50,442: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (22/100)
+
+[2026-03-08 14:56:22,567: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (23/100)
+
+[2026-03-08 14:56:54,692: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (24/100)
+
+[2026-03-08 14:57:26,837: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (25/100)
+
+[2026-03-08 14:57:58,959: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (26/100)
+
+[2026-03-08 14:58:31,099: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (27/100)
+
+[2026-03-08 14:59:03,252: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (28/100)
+
+[2026-03-08 14:59:35,395: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (29/100)
+
+[2026-03-08 15:00:07,548: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (30/100)
+
+[2026-03-08 15:00:39,689: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (31/100)
+
+[2026-03-08 15:01:11,834: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (32/100)
+
+[2026-03-08 15:01:43,972: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (33/100)
+
+[2026-03-08 15:02:16,126: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (34/100)
+
+[2026-03-08 15:02:48,234: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (35/100)
+
+[2026-03-08 15:03:20,364: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (36/100)
+
+[2026-03-08 15:03:52,501: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (37/100)
+
+[2026-03-08 15:04:24,634: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (38/100)
+
+[2026-03-08 15:04:56,775: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (39/100)
+
+[2026-03-08 15:05:28,918: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (40/100)
+
+[2026-03-08 15:06:01,092: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (41/100)
+
+[2026-03-08 15:06:33,230: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (42/100)
+
+[2026-03-08 15:07:05,367: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (43/100)
+
+[2026-03-08 15:07:37,487: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (44/100)
+
+[2026-03-08 15:08:09,622: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (45/100)
+
+[2026-03-08 15:08:41,755: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (46/100)
+
+[2026-03-08 15:09:13,885: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (47/100)
+
+[2026-03-08 15:09:46,028: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (48/100)
+
+[2026-03-08 15:10:18,138: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (49/100)
+
+[2026-03-08 15:10:50,321: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (50/100)
+
+[2026-03-08 15:11:22,550: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (51/100)
+
+[2026-03-08 15:11:54,783: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (52/100)
+
+[2026-03-08 15:12:27,017: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (53/100)
+
+[2026-03-08 15:12:59,271: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (54/100)
+
+[2026-03-08 15:13:31,504: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (55/100)
+
+[2026-03-08 15:14:03,763: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (56/100)
+
+[2026-03-08 15:14:35,973: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (57/100)
+
+[2026-03-08 15:15:08,192: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (58/100)
+
+[2026-03-08 15:15:40,439: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (59/100)
+
+[2026-03-08 15:16:12,650: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (60/100)
+
+[2026-03-08 15:16:44,879: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (61/100)
+
+[2026-03-08 15:17:17,113: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (62/100)
+
+[2026-03-08 15:17:49,337: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (63/100)
+
+[2026-03-08 15:18:21,532: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (64/100)
+
+[2026-03-08 15:18:53,762: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (65/100)
+
+[2026-03-08 15:19:25,979: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (66/100)
+
+[2026-03-08 15:19:58,240: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (67/100)
+
+[2026-03-08 15:20:30,491: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (68/100)
+
+[2026-03-08 15:21:02,708: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (69/100)
+
+[2026-03-08 15:21:34,938: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (70/100)
+
+[2026-03-08 15:22:07,101: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (71/100)
+
+[2026-03-08 15:22:39,225: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (72/100)
+
+[2026-03-08 15:23:11,363: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (73/100)
+
+[2026-03-08 15:23:43,524: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (74/100)
+
+[2026-03-08 15:24:15,669: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (75/100)
+
+[2026-03-08 15:24:47,808: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (76/100)
+
+[2026-03-08 15:25:19,975: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (77/100)
+
+[2026-03-08 15:25:52,266: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (78/100)
+
+[2026-03-08 15:26:24,420: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (79/100)
+
+[2026-03-08 15:26:56,537: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (80/100)
+
+[2026-03-08 15:27:28,671: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (81/100)
+
+[2026-03-08 15:28:00,818: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (82/100)
+
+[2026-03-08 15:28:32,937: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (83/100)
+
+[2026-03-08 15:29:05,085: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (84/100)
+
+[2026-03-08 15:29:37,222: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (85/100)
+
+[2026-03-08 15:30:09,363: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (86/100)
+
+[2026-03-08 15:30:41,566: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (87/100)
+
+[2026-03-08 15:31:13,803: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (88/100)
+
+[2026-03-08 15:31:46,024: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (89/100)
+
+[2026-03-08 15:32:18,257: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (90/100)
+
+[2026-03-08 15:32:50,437: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (91/100)
+
+[2026-03-08 15:33:22,593: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (92/100)
+
+[2026-03-08 15:33:54,730: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (93/100)
+
+[2026-03-08 15:34:26,860: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (94/100)
+
+[2026-03-08 15:34:59,000: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (95/100)
+
+[2026-03-08 15:35:31,144: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (96/100)
+
+[2026-03-08 15:36:03,269: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (97/100)
+
+[2026-03-08 15:36:35,432: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (98/100)
+
+[2026-03-08 15:37:07,563: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (99/100)
+
+[2026-03-08 15:37:39,686: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (100/100)
+
+[2026-03-08 15:38:11,828: CRITICAL/MainProcess] Unrecoverable error: OperationalError('Error 61 connecting to localhost:6379. Connection refused.')
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/virtual/base.py", line 951, in create_channel
+    return self._avail_channels.pop()
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^
+IndexError: pop from empty list
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 998, in connect_check_health
+    sock = self._connect()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1512, in _connect
+    raise err
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1496, in _connect
+    sock.connect(socket_address)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+ConnectionRefusedError: [Errno 61] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 474, in _reraise_as_library_errors
+    yield
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 461, in _ensure_connection
+    return retry_over_time(
+        self._connection_factory, self.recoverable_connection_errors,
+    ...<2 lines>...
+        callback, timeout=timeout
+    )
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/utils/functional.py", line 318, in retry_over_time
+    return fun(*args, **kwargs)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 941, in _connection_factory
+    self._connection = self._establish_connection()
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 863, in _establish_connection
+    conn = self.transport.establish_connection()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/virtual/base.py", line 975, in establish_connection
+    self._avail_channels.append(self.create_channel(self))
+                                ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/virtual/base.py", line 953, in create_channel
+    channel = self.Channel(connection)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/transport/redis.py", line 757, in __init__
+    self.client.ping()
+    ~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/commands/core.py", line 1246, in ping
+    return self.execute_command("PING", **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 716, in execute_command
+    return self._execute_command(*args, **options)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/client.py", line 722, in _execute_command
+    conn = self.connection or pool.get_connection()
+                              ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/utils.py", line 236, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 2958, in get_connection
+    connection.connect()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 976, in connect
+    self.retry.call_with_retry(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        lambda: self.connect_check_health(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        lambda error: self.disconnect(error),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 132, in call_with_retry
+    raise error
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/retry.py", line 120, in call_with_retry
+    return do()
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 977, in <lambda>
+    lambda: self.connect_check_health(
+            ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        check_health=True, retry_socket_connect=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ),
+    ^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/redis/connection.py", line 1022, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error 61 connecting to localhost:6379. Connection refused.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/worker.py", line 203, in start
+    self.blueprint.start(self)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/bootsteps.py", line 365, in start
+    return self.obj.start()
+           ~~~~~~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/connection.py", line 21, in start
+    c.connection = c.connect()
+                   ~~~~~~~~~^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 475, in connect
+    conn = self.connection_for_read(heartbeat=self.amqheartbeat)
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 481, in connection_for_read
+    return self.ensure_connected(
+           ~~~~~~~~~~~~~~~~~~~~~^
+        self.app.connection_for_read(heartbeat=heartbeat))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 535, in ensure_connected
+    conn = conn.ensure_connection(
+        _error_handler, self.app.conf.broker_connection_max_retries,
+        callback=maybe_shutdown,
+    )
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 408, in ensure_connection
+    self._ensure_connection(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 460, in _ensure_connection
+    with ctx():
+         ~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/dhaneshrao/Documents/Projtects/SaverHunt/engine/.venv/lib/python3.14/site-packages/kombu/connection.py", line 478, in _reraise_as_library_errors
+    raise ConnectionError(str(exc)) from exc
+kombu.exceptions.OperationalError: Error 61 connecting to localhost:6379. Connection refused.

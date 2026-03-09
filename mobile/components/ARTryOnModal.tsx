@@ -31,6 +31,7 @@ const COLORS = {
     glassWhite: 'rgba(255,255,255,0.12)',
     glassDark: 'rgba(0,0,0,0.65)',
 };
+const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
 
 // ─── Types ──────────────────────────────────────────────
 export interface OutfitItem {
@@ -265,7 +266,7 @@ export default function ARTryOnModal({
             reader.onloadend = async () => {
                 const base64data = (reader.result as string).split(',')[1];
 
-                const res = await fetch('http://localhost:8000/api/v1/community/ar-share', {
+                const res = await fetch(`${FASTAPI_URL}/api/v1/community/ar-share`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

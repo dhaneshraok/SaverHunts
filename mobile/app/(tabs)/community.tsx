@@ -17,9 +17,9 @@ const COLORS = {
     fireOrange: '#FF7B00',
 };
 
-// Assuming the API is running locally for now
-const API_URL = 'http://localhost:8000/api/v1/community/deals';
-const GROUP_BUYS_API_URL = 'http://localhost:8000/api/v1/group-buys';
+const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
+const API_URL = `${FASTAPI_URL}/api/v1/community/deals`;
+const GROUP_BUYS_API_URL = `${FASTAPI_URL}/api/v1/group-buys`;
 
 export default function CommunityScreen() {
     const [deals, setDeals] = useState<any[]>([]);

@@ -122,7 +122,7 @@ function GroceryCard({ item, index }: { item: any; index: number }) {
         }
         try {
             setIsLoadingAI(true);
-            const res = await fetch(`${FASTAPI_URL}/api/v1/grocery/ai-value`, {
+            const res = await fetch(`${FASTAPI_URL}/api/v1/ai/grocery/value`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -289,11 +289,12 @@ export default function GroceryScreen() {
         if (!activeTaskId) return;
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`${FASTAPI_URL}/api/v1/grocery/results/${activeTaskId}`);
+                const res = await fetch(`${FASTAPI_URL}/api/v1/results/${activeTaskId}`);
                 const data = await res.json();
-                if (res.status === 200 && data.products) {
-                    setResults(data.products);
-                    setStats(data.stats);
+                const resultData = data?.data || data;
+                if (res.status === 200 && resultData.products) {
+                    setResults(resultData.products);
+                    setStats(resultData.stats);
                     setActiveTaskId(null);
                     setIsLoading(false);
                 } else if (res.status >= 500) {
@@ -314,7 +315,7 @@ export default function GroceryScreen() {
         setResults([]);
         setStats(null);
         try {
-            const res = await fetch(`${FASTAPI_URL}/api/v1/grocery/search`, {
+            const res = await fetch(`${FASTAPI_URL}/api/v1/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: query.trim() }),

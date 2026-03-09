@@ -81,13 +81,17 @@ export default function ProfileScreen() {
             setLoading(false);
         });
 
-        supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             if (session?.user?.id) {
                 fetchProfile(session.user.id);
                 fetchUserGroupDeals(session.user.id);
             }
         });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
     }, []);
 
     async function handleAuth() {

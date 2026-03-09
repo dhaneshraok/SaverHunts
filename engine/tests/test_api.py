@@ -1,13 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from main import app
 
 client = TestClient(app)
 
 def test_search_endpoint_queues_task():
+    app.state.redis = SimpleNamespace(get=AsyncMock(return_value=None))
     # Mock the Celery task delay method
-    with patch("main.dummy_scrape.delay") as mock_delay:
+    with patch("routers.grocery.dummy_scrape.delay") as mock_delay:
         # Create a dummy task object to return
         class MockTask:
             id = "test-task-123"

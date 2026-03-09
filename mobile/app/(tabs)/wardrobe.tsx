@@ -95,7 +95,7 @@ export default function WardrobeScreen() {
         setUploading(true);
 
         try {
-            const res = await fetch(`${FASTAPI_URL}/api/v1/wardrobe/upload`, {
+            const res = await fetch(`${FASTAPI_URL}/api/v1/ai/wardrobe/upload`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -414,8 +414,8 @@ export default function WardrobeScreen() {
                                                     onPress={() => {
                                                         setStylistOpen(false);
                                                         router.push({
-                                                            pathname: '/(tabs)/search',
-                                                            params: { q: outfit.upsell_suggestion }
+                                                            pathname: '/(tabs)',
+                                                            params: { sharedQuery: outfit.upsell_suggestion }
                                                         });
                                                     }}
                                                 >

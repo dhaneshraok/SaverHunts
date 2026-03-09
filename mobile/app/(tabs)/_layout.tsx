@@ -17,7 +17,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     // Listen for auth changes to pull the cloud cart down
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user?.id && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         const { data, error } = await supabase
           .from('cloud_carts')
@@ -32,6 +32,10 @@ export default function TabLayout() {
         }
       }
     });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [setFromCloud]);
 
   return (

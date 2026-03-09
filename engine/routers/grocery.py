@@ -15,6 +15,47 @@ from tasks.celery_app import celery_app
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Grocery"])
 
+
+def _allow_mock_fallbacks() -> bool:
+    return os.getenv("ALLOW_MOCK_FALLBACKS", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _build_mock_search_response(query: str) -> dict:
+    mock_products = [
+        {
+            "title": f"{query} - Amazon",
+            "price_inr": 999.0,
+            "image_url": "https://via.placeholder.com/200x200.png?text=Amazon",
+            "product_url": "https://amazon.in",
+            "platform": "Amazon",
+            "original_price_inr": 1299.0,
+            "discount_percent": 23.1,
+            "rating": 4.3,
+        },
+        {
+            "title": f"{query} - Flipkart",
+            "price_inr": 1049.0,
+            "image_url": "https://via.placeholder.com/200x200.png?text=Flipkart",
+            "product_url": "https://flipkart.com",
+            "platform": "Flipkart",
+            "original_price_inr": 1399.0,
+            "discount_percent": 25.0,
+            "rating": 4.2,
+        },
+    ]
+    return {
+        "query": query,
+        "total_results": len(mock_products),
+        "best_price": {
+            "price_inr": mock_products[0]["price_inr"],
+            "platform": mock_products[0]["platform"],
+            "title": mock_products[0]["title"],
+            "savings_from_max": round(mock_products[-1]["price_inr"] - mock_products[0]["price_inr"], 2),
+        },
+        "price_stats": None,
+        "products": mock_products,
+    }
+
 class SearchRequest(BaseModel):
     query: str
 
@@ -23,6 +64,17 @@ class AlertRequest(BaseModel):
     target_price: float
     push_token: str
 
+
+class GroceryListCreateRequest(BaseModel):
+    user_id: str
+    name: str
+
+
+class GroceryWatchCreateRequest(BaseModel):
+    user_id: str
+    item_name: str
+    target_price: float | None = None
+
 @router.post("/search")
 async def search_endpoint(request: SearchRequest, response: Response, req: Request):
     """
@@ -30,15 +82,72 @@ async def search_endpoint(request: SearchRequest, response: Response, req: Reque
     Otherwise triggers a Celery task asynchronously and returns a 202 Accepted status 
     along with the task_id.
     """
-    redis_client = req.app.state.redis
-    cached_result = await redis_client.get(request.query)
+    cached_result = None
+    redis_available = True
+    try:
+        redis_client = req.app.state.redis
+        cached_result = await redis_client.get(request.query)
+    except Exception as e:
+        logger.warning(f"Redis unavailable for search cache: {e}")
+        redis_available = False
+
     if cached_result:
         response.status_code = status.HTTP_200_OK
         return json.loads(cached_result)
 
-    task = dummy_scrape.delay(request.query)
-    response.status_code = status.HTTP_202_ACCEPTED
-    return {"message": "Search queued", "task_id": task.id}
+    if redis_available:
+        try:
+            task = dummy_scrape.delay(request.query)
+            response.status_code = status.HTTP_202_ACCEPTED
+            return {"message": "Search queued", "task_id": task.id}
+        except Exception as e:
+            logger.warning(f"Celery unavailable, returning mock search response: {e}")
+            if not _allow_mock_fallbacks():
+                response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+                return {"error": "Search service unavailable"}
+
+    if not _allow_mock_fallbacks():
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"error": "Search service unavailable"}
+    response.status_code = status.HTTP_200_OK
+    return _build_mock_search_response(request.query)
+
+
+@router.get("/scan/{barcode}")
+async def scan_barcode(barcode: str, response: Response, req: Request):
+    """
+    Barcode compatibility endpoint.
+    Treats barcode lookup as a regular search query and returns cached or queued result.
+    """
+    cached_result = None
+    redis_available = True
+    try:
+        redis_client = req.app.state.redis
+        cached_result = await redis_client.get(barcode)
+    except Exception as e:
+        logger.warning(f"Redis unavailable for barcode cache: {e}")
+        redis_available = False
+
+    if cached_result:
+        response.status_code = status.HTTP_200_OK
+        return json.loads(cached_result)
+
+    if redis_available:
+        try:
+            task = dummy_scrape.delay(barcode)
+            response.status_code = status.HTTP_202_ACCEPTED
+            return {"message": "Scan queued", "task_id": task.id}
+        except Exception as e:
+            logger.warning(f"Celery unavailable for barcode scan, returning mock response: {e}")
+            if not _allow_mock_fallbacks():
+                response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+                return {"error": "Scan service unavailable"}
+
+    if not _allow_mock_fallbacks():
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"error": "Scan service unavailable"}
+    response.status_code = status.HTTP_200_OK
+    return _build_mock_search_response(barcode)
 
 @router.get("/results/{task_id}")
 async def get_results(task_id: str, response: Response):
@@ -161,6 +270,76 @@ async def create_alert(alert: AlertRequest, response: Response):
         }).execute()
         return {"message": "Alert created successfully", "alert": res.data[0]}
     except Exception as e:
+        response.status_code = 500
+        return {"error": str(e)}
+
+
+@router.get("/grocery/lists/{user_id}")
+async def get_grocery_lists(user_id: str, response: Response):
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        return {"lists": []}
+
+    try:
+        res = supabase_client.table("grocery_lists").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return {"status": "success", "lists": res.data or []}
+    except Exception as e:
+        logger.error(f"Get grocery lists failed: {e}")
+        response.status_code = 500
+        return {"error": str(e)}
+
+
+@router.post("/grocery/lists")
+async def create_grocery_list(req: GroceryListCreateRequest, response: Response):
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 500
+        return {"error": "Supabase not configured"}
+
+    try:
+        res = supabase_client.table("grocery_lists").insert({
+            "user_id": req.user_id,
+            "name": req.name,
+        }).execute()
+        return {"status": "success", "list": res.data[0] if res.data else None}
+    except Exception as e:
+        logger.error(f"Create grocery list failed: {e}")
+        response.status_code = 500
+        return {"error": str(e)}
+
+
+@router.get("/grocery/watch/{user_id}")
+async def get_grocery_watch_items(user_id: str, response: Response):
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        return {"watch_items": []}
+
+    try:
+        res = supabase_client.table("grocery_watch_items").select("*").eq("user_id", user_id).eq("active", True).order("created_at", desc=True).execute()
+        return {"status": "success", "watch_items": res.data or []}
+    except Exception as e:
+        logger.error(f"Get grocery watch items failed: {e}")
+        response.status_code = 500
+        return {"error": str(e)}
+
+
+@router.post("/grocery/watch")
+async def create_grocery_watch_item(req: GroceryWatchCreateRequest, response: Response):
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 500
+        return {"error": "Supabase not configured"}
+
+    try:
+        res = supabase_client.table("grocery_watch_items").insert({
+            "user_id": req.user_id,
+            "item_name": req.item_name,
+            "target_price": req.target_price,
+            "active": True,
+        }).execute()
+        return {"status": "success", "watch_item": res.data[0] if res.data else None}
+    except Exception as e:
+        logger.error(f"Create grocery watch item failed: {e}")
         response.status_code = 500
         return {"error": str(e)}
 

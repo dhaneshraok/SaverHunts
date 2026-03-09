@@ -4,13 +4,13 @@ import { YStack, XStack, Text, Button } from 'tamagui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 import Animated, { useSharedValue, useAnimatedStyle, interpolateColor, useAnimatedScrollHandler } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Initialize MMKV only once (it's a sync singleton)
-const storage = new MMKV();
+const storage = createMMKV();
 
 const SLIDES = [
     {

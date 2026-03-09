@@ -23,8 +23,8 @@ import ProductViewer360 from '../../components/ProductViewer360';
 import GroupDealSheet from '../../components/GroupDealSheet';
 import { useLocalSearchParams } from 'expo-router';
 // Initialize MMKV only if it doesn't break in Expo Go (some setups require specific Babel plugins)
-import { MMKV } from 'react-native-mmkv';
-const storage = new MMKV();
+import { createMMKV } from 'react-native-mmkv';
+const storage = createMMKV();
 
 const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -245,7 +245,7 @@ function ProductCard({ item, index, pushToken }: { item: any; index: number; pus
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSummarizing(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ai/summarize', {
+      const res = await fetch(`${FASTAPI_URL}/api/v1/ai/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -272,7 +272,7 @@ function ProductCard({ item, index, pushToken }: { item: any; index: number; pus
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsPredicting(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ai/predict', {
+      const res = await fetch(`${FASTAPI_URL}/api/v1/ai/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,7 +304,7 @@ function ProductCard({ item, index, pushToken }: { item: any; index: number; pus
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/alerts', {
+      const response = await fetch(`${FASTAPI_URL}/api/v1/alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1077,8 +1077,8 @@ export default function SearchScreen() {
     async function fetchLiveDeals() {
       try {
         const [trendingRes, forYouRes] = await Promise.all([
-          fetch('http://localhost:8000/api/v1/deals/trending'),
-          fetch('http://localhost:8000/api/v1/deals/foryou')
+          fetch(`${FASTAPI_URL}/api/v1/deals/trending`),
+          fetch(`${FASTAPI_URL}/api/v1/deals/foryou`)
         ]);
 
         if (trendingRes.ok) {
@@ -1114,7 +1114,7 @@ export default function SearchScreen() {
 
     const intervalId = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/results/${activeTaskId}`);
+        const response = await fetch(`${FASTAPI_URL}/api/v1/results/${activeTaskId}`);
         const data = await response.json();
 
         if (data.status === 'success' && data.data) {
@@ -1156,7 +1156,7 @@ export default function SearchScreen() {
     setActiveTaskId(null); // Reset active task ID
 
     const isBarcode = /^\d+(-\d+)*$/.test(searchQuery.trim());
-    let endpoint = isBarcode ? `http://localhost:8000/api/v1/scan/${searchQuery.trim()}` : `http://localhost:8000/api/v1/search`;
+    let endpoint = isBarcode ? `${FASTAPI_URL}/api/v1/scan/${searchQuery.trim()}` : `${FASTAPI_URL}/api/v1/search`;
     let method = isBarcode ? 'GET' : 'POST';
     let body = isBarcode ? undefined : JSON.stringify({ query: searchQuery });
 

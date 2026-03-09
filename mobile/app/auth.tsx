@@ -4,7 +4,6 @@ import { YStack, XStack, Text, Button, Input, Spinner, View } from 'tamagui';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedBackground from '../components/AnimatedBackground';
@@ -27,10 +26,9 @@ export default function AuthScreen() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const insets = useSafeAreaInsets();
-    const router = useRouter();
-
     async function signInWithEmail() {
-        if (!email || !password) {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail || !password) {
             Alert.alert("Missing Fields", "Please enter both email and password.");
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             return;
@@ -40,7 +38,7 @@ export default function AuthScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         const { error } = await supabase.auth.signInWithPassword({
-            email: email,
+            email: normalizedEmail,
             password: password,
         });
 
@@ -55,7 +53,8 @@ export default function AuthScreen() {
     }
 
     async function signUpWithEmail() {
-        if (!email || !password) {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail || !password) {
             Alert.alert("Missing Fields", "Please enter both email and password.");
             return;
         }
@@ -67,7 +66,7 @@ export default function AuthScreen() {
             data: { session },
             error,
         } = await supabase.auth.signUp({
-            email: email,
+            email: normalizedEmail,
             password: password,
         });
 

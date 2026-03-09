@@ -3,7 +3,6 @@ import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'r
 import { YStack, XStack, Text, Input, Button, Spinner } from 'tamagui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
-import { useSearchStore } from '../store/searchStore';
 
 const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
 
@@ -30,7 +29,7 @@ function SimpleDealCard({ deal, onBuy }: { deal: any, onBuy: () => void }) {
                 contentFit="contain"
             />
             <YStack p="$3" gap="$2">
-                <Text color={COLORS.textPrimary} fontSize={15} fontWeight="700" numberOfLines={2}>{deal.title}</Text>
+                <Text color={COLORS.textPrimary} fontSize={15} fontWeight="700" numberOfLines={2}>{deal.title || deal.product_title}</Text>
                 <XStack jc="space-between" ai="center">
                     <Text color={COLORS.priceGreen} fontSize={18} fontWeight="900">₹{deal.price_inr?.toLocaleString()}</Text>
                     <YStack backgroundColor="rgba(59, 130, 246, 0.15)" px="$2" py="$1" borderRadius={6}>
@@ -54,9 +53,6 @@ export default function GiftConciergeScreen() {
     const [dealResults, setDealResults] = useState<Record<string, any>>({});
     const [isFetchingDeals, setIsFetchingDeals] = useState(false);
 
-    // Use the global store just for the scrape polling function we already built for normal search
-    const { performSearch, startPolling } = useSearchStore();
-
     const handleAskMagicConcierge = async () => {
         if (!prompt.trim()) return;
 
@@ -66,7 +62,7 @@ export default function GiftConciergeScreen() {
 
         try {
             // 1. Ask Gemini for 3 gift ideas
-            const res = await fetch(`${FASTAPI_URL}/api/v1/gift-concierge`, {
+            const res = await fetch(`${FASTAPI_URL}/api/v1/ai/gift-concierge`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt }),
@@ -108,8 +104,8 @@ export default function GiftConciergeScreen() {
                 if (searchRes.status === 200) {
                     // Cache hit
                     const resultData = await searchRes.json();
-                    if (resultData.data && resultData.data.length > 0) {
-                        newResults[idea] = resultData.data[0]; // Just take top result for layout
+                    if (resultData.products && resultData.products.length > 0) {
+                        newResults[idea] = resultData.products[0]; // Just take top result for layout
                     }
                 } else if (searchRes.status === 202) {
                     // Task queued, we need to poll
@@ -120,10 +116,11 @@ export default function GiftConciergeScreen() {
                         await new Promise(r => setTimeout(r, 2000));
                         const pollRes = await fetch(`${FASTAPI_URL}/api/v1/results/${taskData.task_id}`);
                         const pollData = await pollRes.json();
-                        if (pollData.status === 'success' && pollData.data && pollData.data.length > 0) {
-                            newResults[idea] = pollData.data[0];
+                        const products = pollData?.data?.products || [];
+                        if (pollData.status === 'success' && products.length > 0) {
+                            newResults[idea] = products[0];
                             // Update state dynamically as they come in
-                            setDealResults(prev => ({ ...prev, [idea]: pollData.data[0] }));
+                            setDealResults(prev => ({ ...prev, [idea]: products[0] }));
                             break;
                         } else if (pollData.status === 'failed') {
                             break;

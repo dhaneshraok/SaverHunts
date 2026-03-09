@@ -11,13 +11,13 @@ import tamaguiConfig from '../tamagui.config';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePushNotifications } from '../lib/notifications';
 import * as Linking from 'expo-linking';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import * as Location from 'expo-location';
 import { LOCATION_TASK_NAME } from '../lib/locationTasks';
 import { supabase } from '../lib/supabase';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
-const storage = new MMKV();
+const storage = createMMKV();
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -59,6 +59,7 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { expoPushToken } = usePushNotifications();
   const router = useRouter();
+  const segments = useSegments();
   const [session, setSession] = useState<any>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
 
@@ -69,35 +70,46 @@ function RootLayoutNav() {
       setAuthInitialized(true);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   // Log token for debugging (in a real app, send it to your backend here or on login)
-  if (expoPushToken) {
-    console.log('App registered with Push Token:', expoPushToken);
-  }
+  useEffect(() => {
+    if (expoPushToken) {
+      console.log('App registered with Push Token:', expoPushToken);
+    }
+  }, [expoPushToken]);
 
   // Request Location Permissions & Start Background Task for Geofencing
   useEffect(() => {
+    if (!session?.user?.id) return;
+
     (async () => {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       if (foregroundStatus === 'granted') {
         const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
         if (backgroundStatus === 'granted') {
-          console.log("Background location permission granted. Starting geofence task.");
-          await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 15000,
-            distanceInterval: 100, // Process location every 100 meters
-            showsBackgroundLocationIndicator: true, // Visible indicator on iOS
-            foregroundService: {
-              notificationTitle: "SaverHunt is running",
-              notificationBody: "Monitoring for nearby retail store price drops",
-              notificationColor: "#A855F7",
-            }
-          });
+          const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+          if (!started) {
+            console.log("Background location permission granted. Starting geofence task.");
+            await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+              accuracy: Location.Accuracy.Balanced,
+              timeInterval: 15000,
+              distanceInterval: 100, // Process location every 100 meters
+              showsBackgroundLocationIndicator: true, // Visible indicator on iOS
+              foregroundService: {
+                notificationTitle: "SaverHunt is running",
+                notificationBody: "Monitoring for nearby retail store price drops",
+                notificationColor: "#A855F7",
+              }
+            });
+          }
         } else {
           console.log("Background location permission denied.");
         }
@@ -105,30 +117,39 @@ function RootLayoutNav() {
         console.log("Foreground location permission denied.");
       }
     })();
-  }, []);
+  }, [session?.user?.id]);
 
   // Master Routing Logic: Auth Guard & First-Time User Check
   useEffect(() => {
     if (!authInitialized) return;
+    const topSegment = segments[0] as string | undefined;
 
     if (!session) {
       // Not logged in -> Auth Screen
-      router.replace('/auth' as any);
+      if (topSegment !== 'auth') {
+        router.replace('/auth' as any);
+      }
     } else {
       // Logged in -> Ensure they've seen onboarding
       try {
         const hasOnboarded = storage.getBoolean('has_seen_onboarding');
         if (!hasOnboarded) {
-          router.replace('/onboarding' as any);
+          if (topSegment !== 'onboarding') {
+            router.replace('/onboarding' as any);
+          }
         } else {
-          router.replace('/(tabs)');
+          if (topSegment !== '(tabs)') {
+            router.replace('/(tabs)');
+          }
         }
       } catch (e) {
         console.error('Error reading onboarding status', e);
-        router.replace('/(tabs)');
+        if (topSegment !== '(tabs)') {
+          router.replace('/(tabs)');
+        }
       }
     }
-  }, [session, authInitialized]);
+  }, [session, authInitialized, segments, router]);
 
   // Handle incoming deep links (specifically for "Share to SaverHunt")
   useEffect(() => {

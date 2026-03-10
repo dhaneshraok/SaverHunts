@@ -1,21 +1,43 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 
-// Provide an empty client if variables are missing to prevent immediate crashes,
-// but log a warning.
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase URL or Anon Key is missing. Check your .env setup.');
 }
 
+// Web uses localStorage directly; native uses AsyncStorage
+const webStorage = {
+    getItem: (key: string) => {
+        try { return Promise.resolve(localStorage.getItem(key)); }
+        catch { return Promise.resolve(null); }
+    },
+    setItem: (key: string, value: string) => {
+        try { localStorage.setItem(key, value); return Promise.resolve(); }
+        catch { return Promise.resolve(); }
+    },
+    removeItem: (key: string) => {
+        try { localStorage.removeItem(key); return Promise.resolve(); }
+        catch { return Promise.resolve(); }
+    },
+};
+
+function getStorage() {
+    if (Platform.OS === 'web') {
+        return webStorage;
+    }
+    // Dynamic require so Metro doesn't try to resolve the native module on web
+    return require('@react-native-async-storage/async-storage').default;
+}
+
 export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder', {
     auth: {
-        storage: AsyncStorage,
+        storage: getStorage(),
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: Platform.OS === 'web',
     },
 });

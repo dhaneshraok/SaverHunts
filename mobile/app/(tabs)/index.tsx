@@ -22,9 +22,7 @@ import ARTryOnModal from '../../components/ARTryOnModal';
 import ProductViewer360 from '../../components/ProductViewer360';
 import GroupDealSheet from '../../components/GroupDealSheet';
 import { useLocalSearchParams } from 'expo-router';
-// Initialize MMKV only if it doesn't break in Expo Go (some setups require specific Babel plugins)
-import { createMMKV } from 'react-native-mmkv';
-const storage = createMMKV();
+import { storage } from '../../lib/storage';
 
 const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');

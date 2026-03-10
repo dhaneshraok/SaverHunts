@@ -12,12 +12,9 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { usePushNotifications } from '../lib/notifications';
 import * as Linking from 'expo-linking';
 import { useRouter, useSegments } from 'expo-router';
-import * as Location from 'expo-location';
-import { LOCATION_TASK_NAME } from '../lib/locationTasks';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { createMMKV } from 'react-native-mmkv';
-
-const storage = createMMKV();
+import { storage } from '../lib/storage';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -86,11 +83,14 @@ function RootLayoutNav() {
     }
   }, [expoPushToken]);
 
-  // Request Location Permissions & Start Background Task for Geofencing
+  // Request Location Permissions & Start Background Task for Geofencing (native only)
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || Platform.OS === 'web') return;
 
     (async () => {
+      const Location = await import('expo-location');
+      const { LOCATION_TASK_NAME } = await import('../lib/locationTasks');
+
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       if (foregroundStatus === 'granted') {
         const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
@@ -101,8 +101,8 @@ function RootLayoutNav() {
             await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
               accuracy: Location.Accuracy.Balanced,
               timeInterval: 15000,
-              distanceInterval: 100, // Process location every 100 meters
-              showsBackgroundLocationIndicator: true, // Visible indicator on iOS
+              distanceInterval: 100,
+              showsBackgroundLocationIndicator: true,
               foregroundService: {
                 notificationTitle: "SaverHunt is running",
                 notificationBody: "Monitoring for nearby retail store price drops",

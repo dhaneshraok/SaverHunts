@@ -1,5 +1,5 @@
 import React from 'react';
-import { SymbolView } from 'expo-symbols';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Link, Tabs } from 'expo-router';
 import { Platform, Pressable } from 'react-native';
 
@@ -55,24 +55,20 @@ export default function TabLayout() {
         options={{
           title: 'Search',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'magnifyingglass',
-                android: 'search',
-                web: 'search',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="magnify"
               size={28}
+              color={color}
             />
           ),
           headerRight: () => (
             <Link href="/modal" asChild>
               <Pressable style={{ marginRight: 15 }}>
                 {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
+                  <MaterialCommunityIcons
+                    name="information-outline"
                     size={25}
-                    tintColor={Colors[colorScheme].text}
+                    color={Colors[colorScheme].text}
                     style={{ opacity: pressed ? 0.5 : 1 }}
                   />
                 )}
@@ -86,14 +82,10 @@ export default function TabLayout() {
         options={{
           title: 'Grocery',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'basket',
-                android: 'shopping_basket',
-                web: 'shopping_basket',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="basket"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -105,14 +97,10 @@ export default function TabLayout() {
           tabBarBadge: cartItemCount > 0 ? cartItemCount : undefined,
           tabBarBadgeStyle: { backgroundColor: '#DC2626', color: 'white' },
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'cart',
-                android: 'shopping_cart',
-                web: 'shopping_cart',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="cart"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -122,14 +110,10 @@ export default function TabLayout() {
         options={{
           title: 'Deals',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'flame',
-                android: 'whatshot',
-                web: 'whatshot',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="fire"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -139,14 +123,10 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'person.crop.circle',
-                android: 'person',
-                web: 'person',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="account"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -156,14 +136,10 @@ export default function TabLayout() {
         options={{
           title: 'Rankings',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'trophy',
-                android: 'emoji_events',
-                web: 'emoji_events',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="trophy"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -173,14 +149,10 @@ export default function TabLayout() {
         options={{
           title: 'Wardrobe',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'tshirt',
-                android: 'checkroom',
-                web: 'checkroom',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="tshirt-crew"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -190,14 +162,10 @@ export default function TabLayout() {
         options={{
           title: 'Gifts',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'wand.and.stars',
-                android: 'auto_awesome',
-                web: 'auto_awesome',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="gift-outline"
               size={28}
+              color={color}
             />
           ),
         }}
@@ -207,14 +175,10 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'gear',
-                android: 'settings',
-                web: 'settings',
-              }}
-              tintColor={color}
+            <MaterialCommunityIcons
+              name="cog"
               size={28}
+              color={color}
             />
           ),
         }}

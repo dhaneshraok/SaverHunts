@@ -1,7 +1,19 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
+
+// Web uses localStorage, native uses AsyncStorage
+const getCartStorage = () => {
+    if (Platform.OS === 'web') {
+        return {
+            getItem: (key: string) => Promise.resolve(localStorage.getItem(key)),
+            setItem: (key: string, value: string) => { localStorage.setItem(key, value); return Promise.resolve(); },
+            removeItem: (key: string) => { localStorage.removeItem(key); return Promise.resolve(); },
+        };
+    }
+    return require('@react-native-async-storage/async-storage').default;
+};
 
 export interface CartItem {
     id: string; // The original product ID or generated ID
@@ -103,7 +115,7 @@ export const useCartStore = create<CartState>()(
         }),
         {
             name: 'saverhunt-cart-storage',
-            storage: createJSONStorage(() => AsyncStorage),
+            storage: createJSONStorage(() => getCartStorage()),
         }
     )
 );

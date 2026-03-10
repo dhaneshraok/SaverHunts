@@ -4,7 +4,7 @@ import { YStack, XStack, Text, Button } from 'tamagui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { createMMKV } from 'react-native-mmkv';
+import { storage } from '../lib/storage';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -16,8 +16,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const storage = createMMKV();
-
 const SLIDES = [
     {
         id: '1',

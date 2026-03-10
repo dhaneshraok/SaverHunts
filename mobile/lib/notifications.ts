@@ -1,36 +1,42 @@
 import { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
 
-// Configure how notifications appear when the app is in the foreground
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+// Web-safe: only import and configure native notification modules on non-web platforms.
+// These top-level requires crash on web, so we guard them behind a Platform check.
+let Notifications: any = null;
+let Device: any = null;
+let Constants: any = null;
+
+if (Platform.OS !== 'web') {
+    Notifications = require('expo-notifications');
+    Device = require('expo-device');
+    Constants = require('expo-constants').default;
+
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+}
 
 export function usePushNotifications() {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-    const [notification, setNotification] = useState<Notifications.Notification | null>(null);
-    const notificationListener = useRef<Notifications.EventSubscription | null>(null);
-    const responseListener = useRef<Notifications.EventSubscription | null>(null);
+    const [notification, setNotification] = useState<any>(null);
+    const notificationListener = useRef<any>(null);
+    const responseListener = useRef<any>(null);
 
     useEffect(() => {
+        if (Platform.OS === 'web' || !Notifications) return;
+
         registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
 
-        // Listen for incoming notifications while the app is foregrounded
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            setNotification(notification);
+        notificationListener.current = Notifications.addNotificationReceivedListener((n: any) => {
+            setNotification(n);
         });
 
-        // Listen for user interactions with notifications
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
             console.log('User interacted with notification:', response);
         });
 
@@ -44,6 +50,8 @@ export function usePushNotifications() {
 }
 
 async function registerForPushNotificationsAsync() {
+    if (Platform.OS === 'web' || !Notifications || !Device || !Constants) return null;
+
     let token = null;
 
     if (Platform.OS === 'android') {
@@ -73,7 +81,6 @@ async function registerForPushNotificationsAsync() {
             Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
         if (!projectId) {
-            // Setup simple token generation if not fully linked to EAS yet
             token = (await Notifications.getExpoPushTokenAsync()).data;
         } else {
             token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;

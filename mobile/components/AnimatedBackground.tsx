@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     useSharedValue,
@@ -9,142 +8,214 @@ import Animated, {
     withTiming,
     Easing,
     withSequence,
+    withDelay,
 } from 'react-native-reanimated';
 
 const { width, height } = Dimensions.get('window');
-const ORB_SIZE = width * 1.4;
 
-export default function AnimatedBackground() {
-    const rotation1 = useSharedValue(0);
-    const rotation2 = useSharedValue(0);
-    const scale = useSharedValue(1);
+// Multiple orbs at different sizes for depth
+const ORBS = [
+    {
+        // Large purple aurora — top left
+        size: width * 1.6,
+        colors: ['#8B5CF6', '#6D28D9', '#4C1D95', 'transparent'] as const,
+        top: -width * 0.7,
+        left: -width * 0.5,
+        opacity: 0.6,
+        duration: 28000,
+        direction: 1,
+        scaleRange: [1, 1.2],
+        translateRange: 40,
+    },
+    {
+        // Electric blue — bottom right
+        size: width * 1.4,
+        colors: ['#3B82F6', '#2563EB', '#1E3A8A', 'transparent'] as const,
+        top: height * 0.4,
+        left: width * 0.1,
+        opacity: 0.55,
+        duration: 32000,
+        direction: -1,
+        scaleRange: [1, 1.15],
+        translateRange: 35,
+    },
+    {
+        // Teal accent — center
+        size: width * 0.9,
+        colors: ['#06B6D4', '#0891B2', '#164E63', 'transparent'] as const,
+        top: height * 0.15,
+        left: width * 0.3,
+        opacity: 0.4,
+        duration: 22000,
+        direction: 1,
+        scaleRange: [0.95, 1.1],
+        translateRange: 50,
+    },
+    {
+        // Warm magenta glow — bottom left
+        size: width * 1.1,
+        colors: ['#EC4899', '#BE185D', '#831843', 'transparent'] as const,
+        top: height * 0.55,
+        left: -width * 0.4,
+        opacity: 0.35,
+        duration: 35000,
+        direction: -1,
+        scaleRange: [1, 1.18],
+        translateRange: 30,
+    },
+    {
+        // Subtle gold highlight — top right
+        size: width * 0.7,
+        colors: ['#F59E0B', '#D97706', '#78350F', 'transparent'] as const,
+        top: -width * 0.1,
+        left: width * 0.5,
+        opacity: 0.25,
+        duration: 26000,
+        direction: 1,
+        scaleRange: [1, 1.12],
+        translateRange: 25,
+    },
+];
+
+interface OrbProps {
+    orb: typeof ORBS[0];
+    index: number;
+}
+
+function AnimatedOrb({ orb, index }: OrbProps) {
+    const rotation = useSharedValue(0);
+    const scale = useSharedValue(orb.scaleRange[0]);
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
 
     useEffect(() => {
-        rotation1.value = withRepeat(
-            withTiming(360, { duration: 25000, easing: Easing.linear }),
-            -1,
-            false
+        const delay = index * 800; // Stagger start
+
+        rotation.value = withDelay(
+            delay,
+            withRepeat(
+                withTiming(360 * orb.direction, { duration: orb.duration, easing: Easing.linear }),
+                -1,
+                false
+            )
         );
-        rotation2.value = withRepeat(
-            withTiming(-360, { duration: 30000, easing: Easing.linear }),
-            -1,
-            false
+
+        scale.value = withDelay(
+            delay,
+            withRepeat(
+                withSequence(
+                    withTiming(orb.scaleRange[1], { duration: orb.duration * 0.35, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(orb.scaleRange[0], { duration: orb.duration * 0.35, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            )
         );
-        scale.value = withRepeat(
+
+        translateX.value = withDelay(
+            delay + 500,
+            withRepeat(
+                withSequence(
+                    withTiming(orb.translateRange, { duration: orb.duration * 0.4, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(-orb.translateRange, { duration: orb.duration * 0.4, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            )
+        );
+
+        translateY.value = withDelay(
+            delay + 300,
+            withRepeat(
+                withSequence(
+                    withTiming(-orb.translateRange * 0.7, { duration: orb.duration * 0.45, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(orb.translateRange * 0.7, { duration: orb.duration * 0.45, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            )
+        );
+    }, []);
+
+    const animStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateX: translateX.value },
+            { translateY: translateY.value },
+            { rotate: `${rotation.value}deg` },
+            { scale: scale.value },
+        ],
+    }));
+
+    return (
+        <Animated.View
+            style={[
+                {
+                    position: 'absolute',
+                    width: orb.size,
+                    height: orb.size,
+                    borderRadius: orb.size / 2,
+                    overflow: 'hidden',
+                    opacity: orb.opacity,
+                    top: orb.top,
+                    left: orb.left,
+                },
+                animStyle,
+            ]}
+        >
+            <LinearGradient
+                colors={orb.colors as any}
+                style={{ width: '100%', height: '100%', borderRadius: orb.size / 2 }}
+                start={{ x: 0.2, y: 0.2 }}
+                end={{ x: 0.85, y: 0.85 }}
+            />
+        </Animated.View>
+    );
+}
+
+export default function AnimatedBackground() {
+    // Subtle shimmer/pulse on the overlay
+    const overlayPulse = useSharedValue(0.3);
+
+    useEffect(() => {
+        overlayPulse.value = withRepeat(
             withSequence(
-                withTiming(1.15, { duration: 8000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 8000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-        translateX.value = withRepeat(
-            withSequence(
-                withTiming(30, { duration: 12000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(-30, { duration: 12000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-        translateY.value = withRepeat(
-            withSequence(
-                withTiming(-20, { duration: 10000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(20, { duration: 10000, easing: Easing.inOut(Easing.ease) })
+                withTiming(0.4, { duration: 6000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.3, { duration: 6000, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
         );
     }, []);
 
-    const animatedStyle1 = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: translateX.value },
-            { translateY: translateY.value },
-            { rotate: `${rotation1.value}deg` },
-            { scale: scale.value },
-        ],
-    }));
-
-    const animatedStyle2 = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: -translateX.value },
-            { translateY: -translateY.value },
-            { rotate: `${rotation2.value}deg` },
-            { scale: scale.value },
-        ],
-    }));
-
-    const animatedStyle3 = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: translateY.value },
-            { translateY: translateX.value },
-            { rotate: `${rotation1.value * 0.7}deg` },
-            { scale: scale.value },
-        ],
+    const overlayStyle = useAnimatedStyle(() => ({
+        backgroundColor: `rgba(7, 10, 15, ${overlayPulse.value})`,
     }));
 
     return (
-        <View style={StyleSheet.absoluteFillObject}>
-            {/* Deep dark base */}
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#070A0F' }]} />
-
-            {/* Orb 1 — Deep Purple, top-left */}
-            <Animated.View style={[styles.orbContainer, { top: -ORB_SIZE * 0.4, left: -ORB_SIZE * 0.4 }, animatedStyle1]}>
-                <LinearGradient
-                    colors={['#7C3AED', '#4C1D95', 'transparent']}
-                    style={styles.orbGradient}
-                    start={{ x: 0.3, y: 0.3 }}
-                    end={{ x: 0.8, y: 0.8 }}
-                />
-            </Animated.View>
-
-            {/* Orb 2 — Midnight Blue, bottom-right */}
-            <Animated.View style={[styles.orbContainer, { bottom: -ORB_SIZE * 0.35, right: -ORB_SIZE * 0.4 }, animatedStyle2]}>
-                <LinearGradient
-                    colors={['#2563EB', '#1E3A8A', 'transparent']}
-                    style={styles.orbGradient}
-                    start={{ x: 0.5, y: 0.2 }}
-                    end={{ x: 0.9, y: 0.9 }}
-                />
-            </Animated.View>
-
-            {/* Orb 3 — Warm accent, center-right */}
-            <Animated.View style={[styles.orbContainer, { top: height * 0.25, right: -ORB_SIZE * 0.3, width: ORB_SIZE * 0.8, height: ORB_SIZE * 0.8 }, animatedStyle3]}>
-                <LinearGradient
-                    colors={['#D97706', '#92400E', 'transparent']}
-                    style={styles.orbGradient}
-                    start={{ x: 0.4, y: 0.3 }}
-                    end={{ x: 0.8, y: 0.9 }}
-                />
-            </Animated.View>
-
-            {/* Heavy blur layer to blend the orbs into a soft mesh gradient */}
-            <BlurView
-                intensity={80}
-                tint="dark"
-                style={StyleSheet.absoluteFillObject}
+        <View style={StyleSheet.absoluteFill}>
+            {/* Deep space base */}
+            <LinearGradient
+                colors={['#030711', '#0A0F1C', '#0F0A1E', '#070A0F']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
             />
 
-            {/* Additional tinted overlay to deepen the look */}
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(7, 10, 15, 0.35)' }]} />
+            {/* Animated orbs */}
+            {ORBS.map((orb, i) => (
+                <AnimatedOrb key={i} orb={orb} index={i} />
+            ))}
+
+            {/* Noise/grain texture simulation via subtle gradient overlay */}
+            <LinearGradient
+                colors={['transparent', 'rgba(255,255,255,0.015)', 'transparent']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+
+            {/* Breathing overlay for depth */}
+            <Animated.View style={[StyleSheet.absoluteFill, overlayStyle]} />
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    orbContainer: {
-        position: 'absolute',
-        width: ORB_SIZE,
-        height: ORB_SIZE,
-        borderRadius: ORB_SIZE / 2,
-        overflow: 'hidden',
-        opacity: 0.7,
-    },
-    orbGradient: {
-        width: '100%',
-        height: '100%',
-        borderRadius: ORB_SIZE / 2,
-    },
-});

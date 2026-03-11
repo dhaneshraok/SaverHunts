@@ -1,10 +1,46 @@
+import os
 import logging
 import asyncio
 from datetime import datetime
 from tasks.celery_app import celery_app
 from tasks.scrapers import _scrape_all_sources, supabase_client
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = logging.getLogger(__name__)
+
+EXPO_ACCESS_TOKEN = os.getenv("EXPO_ACCESS_TOKEN", "")
+
+
+def _send_push_notification(push_token: str, title: str, body: str, data: dict = None):
+    """Send a push notification via Expo Push API."""
+    if not push_token:
+        return
+
+    try:
+        from exponent_server_sdk import (
+            PushClient, PushMessage, PushServerError
+        )
+
+        client = PushClient()
+        if EXPO_ACCESS_TOKEN:
+            client = PushClient(force_push_token=None)
+
+        message = PushMessage(
+            to=push_token,
+            title=title,
+            body=body,
+            data=data or {},
+            sound="default",
+            channel_id="default",
+        )
+        response = client.publish(message)
+        response.validate_response()
+        logger.info(f"Push notification sent to {push_token[:20]}...")
+    except ImportError:
+        logger.warning("exponent-server-sdk not installed. Push notification skipped.")
+    except Exception as e:
+        logger.error(f"Push notification failed: {e}")
 
 async def _process_alerts():
     if not supabase_client:
@@ -53,11 +89,23 @@ async def _process_alerts():
             
             for alert in matching_alerts:
                 if current_best_price <= alert["target_price"]:
-                    # Target met! Send push notification
-                    # In a real app we would use Expo Push API here
-                    logger.info(f"🚨 ALERT TRIGGERED: {query} dropped to ₹{current_best_price} (Target: ₹{alert['target_price']}). Sending Push to {alert['push_token']}!")
-                    
-                    # Update alert: mark as notified and toggle off is_active (or keep active depending on logic)
+                    # Target met! Send real push notification
+                    logger.info(f"ALERT TRIGGERED: {query} dropped to ₹{current_best_price} (Target: ₹{alert['target_price']})")
+
+                    _send_push_notification(
+                        push_token=alert["push_token"],
+                        title=f"Price Drop: {query}",
+                        body=f"Now ₹{current_best_price:,.0f} on {best_product.get('platform', 'Unknown')}! Your target was ₹{alert['target_price']:,.0f}.",
+                        data={
+                            "type": "price_alert",
+                            "query": query,
+                            "price": current_best_price,
+                            "platform": best_product.get("platform", ""),
+                            "url": best_product.get("product_url", ""),
+                        }
+                    )
+
+                    # Mark alert as notified
                     supabase_client.table("price_alerts").update({
                         "is_active": False,
                         "last_notified_at": datetime.utcnow().isoformat()

@@ -70,8 +70,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-image",
-      "expo-sharing",
       [
         "expo-location",
         {

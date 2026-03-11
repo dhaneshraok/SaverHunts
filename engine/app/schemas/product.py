@@ -11,6 +11,7 @@ class ProductResult(BaseModel):
     original_price_inr: Optional[float] = None
     discount_percent: Optional[float] = None
     rating: Optional[float] = None
+    is_fake_sale: bool = False
 
 
 class BestPrice(BaseModel):

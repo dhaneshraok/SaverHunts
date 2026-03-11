@@ -57,6 +57,12 @@ GROCERY_PLATFORMS = [
         "delivery_mins": 30,
         "logo": "🟢",
     },
+    {
+        "name": "DMart Ready",
+        "site": "dmart.in",
+        "delivery_mins": 120,
+        "logo": "🔴",
+    },
 ]
 
 

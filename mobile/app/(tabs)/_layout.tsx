@@ -1,188 +1,259 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Tabs } from 'expo-router';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring,
+} from 'react-native-reanimated';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useCartStore } from '../../store/cartStore';
 import { supabase } from '../../lib/supabase';
-import { useEffect } from 'react';
+import { COLORS } from '../../constants/Theme';
+import ScannerModal from '../../components/ScannerModal';
+import { usePushNotifications } from '../../lib/notifications';
+import { useRouter } from 'expo-router';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const cartItemCount = useCartStore((state) => state.getTotalItems());
   const setFromCloud = useCartStore((state) => state.setFromCloud);
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const router = useRouter();
 
+  // Register push notifications with user context
+  usePushNotifications(userId);
+
+  // Cloud cart sync on auth + capture userId for push token
   useEffect(() => {
-    // Listen for auth changes to pull the cloud cart down
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) setUserId(session.user.id);
+    });
+
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setUserId(session?.user?.id || null);
       if (session?.user?.id && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('cloud_carts')
           .select('cart_state')
           .eq('user_id', session.user.id)
           .single();
-
-        if (data && data.cart_state) {
-          // If the cloud has items, pull them down to local state
-          // For MVP, we overwrite. A robust version would merge local+cloud.
-          setFromCloud(data.cart_state);
-        }
+        if (data?.cart_state) setFromCloud(data.cart_state);
       }
     });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    return () => authListener.subscription.unsubscribe();
   }, [setFromCloud]);
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: '#58A6FF',
-        tabBarInactiveTintColor: '#484F58',
-        tabBarStyle: {
-          backgroundColor: '#0F1117',
-          borderTopColor: '#21262D',
-          borderTopWidth: 1,
-        },
-        headerShown: false,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="magnify"
-              size={28}
-              color={color}
-            />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <MaterialCommunityIcons
-                    name="information-outline"
-                    size={25}
-                    color={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
+    <>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: COLORS.brandPurpleLight,
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.3)',
+          tabBarShowLabel: true,
+          tabBarLabelStyle: styles.tabLabel,
+        }}
+      >
+        {/* ── Home (Search) ── */}
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="home" color={color} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* ── Explore (Deals + Community) ── */}
+        <Tabs.Screen
+          name="explore"
+          options={{
+            title: 'Explore',
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="fire" color={color} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* ── Center Scan FAB (Dummy tab — triggers modal) ── */}
+        <Tabs.Screen
+          name="scan-placeholder"
+          options={{
+            title: '',
+            tabBarIcon: () => null,
+            tabBarButton: () => (
+              <ScanFAB onPress={() => setIsScannerVisible(true)} />
+            ),
+          }}
+          listeners={{
+            tabPress: (e) => {
+              e.preventDefault();
+              setIsScannerVisible(true);
+            },
+          }}
+        />
+
+        {/* ── Cart ── */}
+        <Tabs.Screen
+          name="cart"
+          options={{
+            title: 'Cart',
+            tabBarBadge: cartItemCount > 0 ? cartItemCount : undefined,
+            tabBarBadgeStyle: styles.badge,
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="cart-outline" color={color} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* ── Profile (Hub) ── */}
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="account-circle-outline" color={color} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* ── Hidden tabs (still exist as files, but not shown in tab bar) ── */}
+        <Tabs.Screen name="grocery" options={{ href: null }} />
+        <Tabs.Screen name="feed" options={{ href: null }} />
+        <Tabs.Screen name="leaderboard" options={{ href: null }} />
+        <Tabs.Screen name="wardrobe" options={{ href: null }} />
+        <Tabs.Screen name="gift-concierge" options={{ href: null }} />
+        <Tabs.Screen name="settings" options={{ href: null }} />
+        <Tabs.Screen name="community" options={{ href: null }} />
+      </Tabs>
+
+      {/* Scanner Modal */}
+      <ScannerModal
+        visible={isScannerVisible}
+        onClose={() => setIsScannerVisible(false)}
+        onBarcodeScanned={(barcode) => {
+          setIsScannerVisible(false);
+          router.push(`/(tabs)?sharedQuery=${encodeURIComponent(barcode)}`);
         }}
       />
-      <Tabs.Screen
-        name="grocery"
-        options={{
-          title: 'Grocery',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="basket"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="cart"
-        options={{
-          title: 'Cart',
-          tabBarBadge: cartItemCount > 0 ? cartItemCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: '#DC2626', color: 'white' },
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="cart"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="feed"
-        options={{
-          title: 'Deals',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="fire"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="account"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="leaderboard"
-        options={{
-          title: 'Rankings',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="trophy"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="wardrobe"
-        options={{
-          title: 'Wardrobe',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="tshirt-crew"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="gift-concierge"
-        options={{
-          title: 'Gifts',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="gift-outline"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="cog"
-              size={28}
-              color={color}
-            />
-          ),
-        }}
-      />
-    </Tabs>
+    </>
   );
 }
+
+// ─── Tab Icon with animated indicator ───────────────────
+function TabIcon({ name, color, focused }: { name: string; color: string; focused: boolean }) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    scale.value = focused
+      ? withSpring(1.1, { damping: 12, stiffness: 200 })
+      : withSpring(1, { damping: 12, stiffness: 200 });
+  }, [focused]);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View style={styles.iconWrap}>
+      <Animated.View style={animStyle}>
+        <MaterialCommunityIcons name={name as any} size={24} color={color} />
+      </Animated.View>
+      {focused && <View style={styles.activeIndicator} />}
+    </View>
+  );
+}
+
+// ─── Center Scan FAB ────────────────────────────────────
+function ScanFAB({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.fabWrap}>
+      <View style={styles.fab}>
+        <LinearGradient
+          colors={['#8B5CF6', '#6D28D9']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <MaterialCommunityIcons name="line-scan" size={26} color="#FFF" />
+      </View>
+      {/* Glow effect */}
+      <View style={styles.fabGlow} />
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: 'rgba(3,7,17,0.95)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.04)',
+    height: Platform.OS === 'ios' ? 88 : 65,
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+    // Subtle blur-like effect
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  badge: {
+    backgroundColor: '#DC2626',
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  iconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 30,
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#A78BFA',
+  },
+  fabWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    top: -18,
+    width: 62,
+    height: 62,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    // Border glow
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabGlow: {
+    position: 'absolute',
+    width: 70,
+    height: 70,
+    borderRadius: 22,
+    backgroundColor: 'rgba(139,92,246,0.08)',
+    zIndex: -1,
+  },
+});

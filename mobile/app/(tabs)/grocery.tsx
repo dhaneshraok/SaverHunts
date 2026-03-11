@@ -287,9 +287,20 @@ export default function GroceryScreen() {
     // Polling for search results
     useEffect(() => {
         if (!activeTaskId) return;
+        const startTime = Date.now();
         const interval = setInterval(async () => {
+            // Stop polling after 30 seconds
+            if (Date.now() - startTime > 30000) {
+                setActiveTaskId(null);
+                setIsLoading(false);
+                Alert.alert('Timeout', 'Search took too long. Please try again.');
+                return;
+            }
             try {
-                const res = await fetch(`${FASTAPI_URL}/api/v1/results/${activeTaskId}`);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 8000);
+                const res = await fetch(`${FASTAPI_URL}/api/v1/results/${activeTaskId}`, { signal: controller.signal });
+                clearTimeout(timeout);
                 const data = await res.json();
                 const resultData = data?.data || data;
                 if (res.status === 200 && resultData.products) {
@@ -315,11 +326,15 @@ export default function GroceryScreen() {
         setResults([]);
         setStats(null);
         try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
             const res = await fetch(`${FASTAPI_URL}/api/v1/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: query.trim() }),
+                signal: controller.signal,
             });
+            clearTimeout(timeout);
             const data = await res.json();
             if (res.status === 200) {
                 setResults(data.products || []);
@@ -629,16 +644,15 @@ export default function GroceryScreen() {
             </Sheet>
 
             {/* Barcode Scanner */}
-            {isScannerVisible && (
-                <ScannerModal
-                    onScan={(code: string) => {
-                        setQuery(code);
-                        setIsScannerVisible(false);
-                        handleSearch();
-                    }}
-                    onClose={() => setIsScannerVisible(false)}
-                />
-            )}
+            <ScannerModal
+                visible={isScannerVisible}
+                onBarcodeScanned={(code: string) => {
+                    setQuery(code);
+                    setIsScannerVisible(false);
+                    handleSearch();
+                }}
+                onClose={() => setIsScannerVisible(false)}
+            />
         </ScrollView>
     );
 }

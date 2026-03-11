@@ -17,6 +17,14 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="Asia/Kolkata",
     enable_utc=True,
+    # Production hardening
+    task_acks_late=True,              # Retry if worker crashes mid-task
+    worker_prefetch_multiplier=1,     # Fair distribution across workers
+    task_soft_time_limit=30,          # 30s soft limit per task
+    task_time_limit=60,               # 60s hard kill
+    task_default_retry_delay=5,       # 5s between retries
+    task_max_retries=3,               # Max 3 retries per task
+    result_expires=3600,              # Results expire after 1 hour
 )
 
 # Celery Beat Schedule

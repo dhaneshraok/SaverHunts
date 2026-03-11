@@ -14,7 +14,7 @@ import * as Linking from 'expo-linking';
 import { useRouter, useSegments } from 'expo-router';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { storage } from '../lib/storage';
+import { storage, initStorage } from '../lib/storage';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -59,11 +59,19 @@ function RootLayoutNav() {
   const segments = useSegments();
   const [session, setSession] = useState<any>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
 
-  // Initialize Supabase Auth Session
+  // Initialize storage and Supabase Auth Session
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    initStorage().then(() => {
+      setStorageReady(true);
+      return supabase.auth.getSession();
+    }).then(({ data: { session } }) => {
       setSession(session);
+      setAuthInitialized(true);
+    }).catch(() => {
+      // Even if something fails, mark as initialized so user isn't stuck
+      setStorageReady(true);
       setAuthInitialized(true);
     });
 
@@ -88,6 +96,7 @@ function RootLayoutNav() {
     if (!session?.user?.id || Platform.OS === 'web') return;
 
     (async () => {
+      try {
       const Location = await import('expo-location');
       const { LOCATION_TASK_NAME } = await import('../lib/locationTasks');
 
@@ -116,12 +125,15 @@ function RootLayoutNav() {
       } else {
         console.log("Foreground location permission denied.");
       }
+      } catch (e) {
+        console.log("Location setup skipped:", e);
+      }
     })();
   }, [session?.user?.id]);
 
   // Master Routing Logic: Auth Guard & First-Time User Check
   useEffect(() => {
-    if (!authInitialized) return;
+    if (!authInitialized || !storageReady) return;
     const topSegment = segments[0] as string | undefined;
 
     if (!session) {
@@ -131,25 +143,26 @@ function RootLayoutNav() {
       }
     } else {
       // Logged in -> Ensure they've seen onboarding
+      let hasOnboarded = false;
       try {
-        const hasOnboarded = storage.getBoolean('has_seen_onboarding');
-        if (!hasOnboarded) {
-          if (topSegment !== 'onboarding') {
-            router.replace('/onboarding' as any);
-          }
-        } else {
-          if (topSegment !== '(tabs)') {
-            router.replace('/(tabs)');
-          }
-        }
+        hasOnboarded = storage.getBoolean('has_seen_onboarding') === true;
       } catch (e) {
         console.error('Error reading onboarding status', e);
+        // Default to NOT onboarded so new users always see it
+        hasOnboarded = false;
+      }
+
+      if (!hasOnboarded) {
+        if (topSegment !== 'onboarding') {
+          router.replace('/onboarding' as any);
+        }
+      } else {
         if (topSegment !== '(tabs)') {
           router.replace('/(tabs)');
         }
       }
     }
-  }, [session, authInitialized, segments, router]);
+  }, [session, authInitialized, storageReady, segments, router]);
 
   // Handle incoming deep links (specifically for "Share to SaverHunt")
   useEffect(() => {
@@ -199,6 +212,7 @@ function RootLayoutNav() {
           <Stack.Screen name="auth" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="product/[id]" />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
       </ThemeProvider>

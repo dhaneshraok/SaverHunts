@@ -36,6 +36,33 @@ const { width: SW } = Dimensions.get('window');
 
 type AuthMode = 'landing' | 'signin' | 'signup';
 
+// ── Reusable Input (defined OUTSIDE component to prevent remount on every keystroke) ──
+function AuthInput({ icon, placeholder, value, onChangeText, secure, secureEntry, onToggleSecure, keyboardType }: {
+    icon: string; placeholder: string; value: string; onChangeText: (t: string) => void;
+    secure?: boolean; secureEntry?: boolean; onToggleSecure?: () => void; keyboardType?: any;
+}) {
+    return (
+        <View style={styles.inputRow}>
+            <MaterialCommunityIcons name={icon as any} size={17} color="rgba(255,255,255,0.3)" style={{ marginRight: 10, marginTop: 1 }} />
+            <TextInput
+                placeholder={placeholder}
+                placeholderTextColor="rgba(255,255,255,0.22)"
+                value={value}
+                onChangeText={onChangeText}
+                secureTextEntry={secure ? secureEntry : false}
+                autoCapitalize="none"
+                keyboardType={keyboardType || 'default'}
+                style={styles.textInput}
+            />
+            {secure && onToggleSecure && (
+                <TouchableOpacity onPress={onToggleSecure} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <MaterialCommunityIcons name={secureEntry ? 'eye-off-outline' : 'eye-outline'} size={18} color="rgba(255,255,255,0.3)" />
+                </TouchableOpacity>
+            )}
+        </View>
+    );
+}
+
 // ── Floating Stats Bar (Social Proof) ──
 function FloatingStats() {
     const float1 = useSharedValue(0);
@@ -163,83 +190,72 @@ export default function AuthScreen() {
     }));
 
     // ── Auth Functions ──
+    // Web-safe alert helper
+    function showAlert(title: string, message: string) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            window.alert(`${title}\n${message}`);
+        } else {
+            Alert.alert(title, message);
+        }
+    }
+
+    // Web-safe haptics
+    function haptic(style: any) {
+        try { Haptics.impactAsync(style); } catch {}
+    }
+
     async function signInWithEmail() {
         const e = email.trim().toLowerCase();
-        if (!e || !password) { Alert.alert('Missing Fields', 'Please enter email and password.'); return; }
+        if (!e || !password) { showAlert('Missing Fields', 'Please enter email and password.'); return; }
         setLoading(true);
         try {
             const { error } = await supabase.auth.signInWithPassword({ email: e, password });
-            if (error) { Alert.alert('Login Failed', error.message); }
-            else { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
-        } catch (err: any) { Alert.alert('Error', err.message || 'Network error'); }
+            if (error) { showAlert('Login Failed', error.message); }
+            else { try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {} }
+        } catch (err: any) { showAlert('Error', err.message || 'Network error'); }
         setLoading(false);
     }
 
     async function signUpWithEmail() {
         const e = email.trim().toLowerCase();
-        if (!e || !password || !confirmPassword) { Alert.alert('Missing Fields', 'Please fill all fields.'); return; }
-        if (password.length < 6) { Alert.alert('Weak Password', 'At least 6 characters.'); return; }
-        if (password !== confirmPassword) { Alert.alert('Mismatch', 'Passwords do not match.'); return; }
+        if (!e || !password || !confirmPassword) { showAlert('Missing Fields', 'Please fill all fields.'); return; }
+        if (password.length < 6) { showAlert('Weak Password', 'At least 6 characters.'); return; }
+        if (password !== confirmPassword) { showAlert('Mismatch', 'Passwords do not match.'); return; }
         setLoading(true);
         try {
             const { data: { session }, error } = await supabase.auth.signUp({ email: e, password });
-            if (error) { Alert.alert('Signup Failed', error.message); }
-            else if (!session) { Alert.alert('Check Email', 'Verification link sent!'); }
-            else { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
-        } catch (err: any) { Alert.alert('Error', err.message || 'Network error'); }
+            if (error) { showAlert('Signup Failed', error.message); }
+            else if (!session) { showAlert('Check Email', 'Verification link sent!'); }
+            else { try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {} }
+        } catch (err: any) { showAlert('Error', err.message || 'Network error'); }
         setLoading(false);
     }
 
     function handleAppleSSO() {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        Alert.alert('Apple Sign In', 'Requires Apple Developer account.');
+        haptic(Haptics.ImpactFeedbackStyle.Medium);
+        showAlert('Apple Sign In', 'Requires Apple Developer account.');
     }
 
     async function handleGoogleSSO() {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        haptic(Haptics.ImpactFeedbackStyle.Medium);
         setLoading(true);
         try {
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: Platform.OS === 'web' ? window.location.origin : 'mobile://auth/callback' },
             });
-            if (error) Alert.alert('Google Sign In Failed', error.message);
+            if (error) showAlert('Google Sign In Failed', error.message);
             if (data?.url && Platform.OS !== 'web') {
                 const { Linking } = require('react-native');
                 await Linking.openURL(data.url);
             }
-        } catch (err: any) { Alert.alert('Error', err.message || 'Something went wrong'); }
+        } catch (err: any) { showAlert('Error', err.message || 'Something went wrong'); }
         setLoading(false);
     }
 
     function resetMode() { setMode('landing'); setEmail(''); setPassword(''); setConfirmPassword(''); }
 
-    // ── Reusable Input ──
-    function AuthInput({ icon, placeholder, value, onChangeText, secure, showEye, keyboardType }: {
-        icon: string; placeholder: string; value: string; onChangeText: (t: string) => void;
-        secure?: boolean; showEye?: boolean; keyboardType?: any;
-    }) {
-        return (
-            <View style={styles.inputRow}>
-                <MaterialCommunityIcons name={icon as any} size={17} color="rgba(255,255,255,0.3)" style={{ marginRight: 10, marginTop: 1 }} />
-                <TextInput
-                    placeholder={placeholder}
-                    placeholderTextColor="rgba(255,255,255,0.22)"
-                    value={value}
-                    onChangeText={onChangeText}
-                    secureTextEntry={secure ? secureEntry : false}
-                    autoCapitalize="none"
-                    keyboardType={keyboardType || 'default'}
-                    style={styles.textInput}
-                />
-                {showEye && (
-                    <TouchableOpacity onPress={() => setSecureEntry(!secureEntry)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <MaterialCommunityIcons name={secureEntry ? 'eye-off-outline' : 'eye-outline'} size={18} color="rgba(255,255,255,0.3)" />
-                    </TouchableOpacity>
-                )}
-            </View>
-        );
-    }
+    const toggleSecure = () => setSecureEntry(!secureEntry);
 
     // ── Primary Button ──
     function PrimaryButton({ label, onPress, colors }: { label: string; onPress: () => void; colors: string[] }) {
@@ -355,7 +371,7 @@ export default function AuthScreen() {
                                         <Text color="rgba(255,255,255,0.35)" fontSize={13} mb="$1">Sign in to continue your hunt</Text>
 
                                         <AuthInput icon="email-outline" placeholder="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" />
-                                        <AuthInput icon="lock-outline" placeholder="Password" value={password} onChangeText={setPassword} secure showEye />
+                                        <AuthInput icon="lock-outline" placeholder="Password" value={password} onChangeText={setPassword} secure secureEntry={secureEntry} onToggleSecure={toggleSecure} />
 
                                         <View style={{ height: 6 }} />
                                         <PrimaryButton label="Sign In" onPress={signInWithEmail} colors={['#8B5CF6', '#6D28D9']} />
@@ -381,7 +397,7 @@ export default function AuthScreen() {
                                         <Text color="rgba(255,255,255,0.35)" fontSize={13} mb="$1">Create your account in seconds</Text>
 
                                         <AuthInput icon="email-outline" placeholder="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" />
-                                        <AuthInput icon="lock-outline" placeholder="Password (min 6 chars)" value={password} onChangeText={setPassword} secure showEye />
+                                        <AuthInput icon="lock-outline" placeholder="Password (min 6 chars)" value={password} onChangeText={setPassword} secure secureEntry={secureEntry} onToggleSecure={toggleSecure} />
                                         <AuthInput icon="lock-check-outline" placeholder="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secure />
 
                                         {/* Live password match */}

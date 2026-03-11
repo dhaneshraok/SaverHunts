@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { api } from './api';
 
 // Web-safe: only import and configure native notification modules on non-web platforms.
 // These top-level requires crash on web, so we guard them behind a Platform check.
@@ -21,16 +22,19 @@ if (Platform.OS !== 'web') {
     });
 }
 
-export function usePushNotifications() {
+export function usePushNotifications(userId?: string | null) {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
     const [notification, setNotification] = useState<any>(null);
     const notificationListener = useRef<any>(null);
     const responseListener = useRef<any>(null);
+    const hasRegistered = useRef(false);
 
     useEffect(() => {
         if (Platform.OS === 'web' || !Notifications) return;
 
-        registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
+        registerForPushNotificationsAsync().then(token => {
+            setExpoPushToken(token);
+        });
 
         notificationListener.current = Notifications.addNotificationReceivedListener((n: any) => {
             setNotification(n);
@@ -45,6 +49,17 @@ export function usePushNotifications() {
             responseListener.current?.remove();
         };
     }, []);
+
+    // Auto-register push token with backend when userId is available
+    useEffect(() => {
+        if (expoPushToken && userId && !hasRegistered.current) {
+            hasRegistered.current = true;
+            api.registerPushToken(userId, expoPushToken, Platform.OS).catch(() => {
+                // Silent fail — will retry on next app launch
+                hasRegistered.current = false;
+            });
+        }
+    }, [expoPushToken, userId]);
 
     return { expoPushToken, notification };
 }
@@ -77,13 +92,17 @@ async function registerForPushNotificationsAsync() {
             return null;
         }
 
-        const projectId =
-            Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+        try {
+            const projectId =
+                Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
-        if (!projectId) {
-            token = (await Notifications.getExpoPushTokenAsync()).data;
-        } else {
-            token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+            if (projectId) {
+                token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+            } else {
+                token = (await Notifications.getExpoPushTokenAsync()).data;
+            }
+        } catch (e: any) {
+            console.log('Push token registration skipped:', e.message);
         }
     } else {
         console.log('Must use physical device for Push Notifications');

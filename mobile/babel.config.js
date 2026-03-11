@@ -3,15 +3,6 @@ module.exports = function (api) {
     return {
         presets: ['babel-preset-expo'],
         plugins: [
-            [
-                '@tamagui/babel-plugin',
-                {
-                    components: ['tamagui'],
-                    config: './tamagui.config.ts',
-                    logTimings: true,
-                    disableExtraction: process.env.NODE_ENV === 'development',
-                },
-            ],
             // Transform import.meta.env → process.env for web compatibility (zustand v5)
             importMetaTransformPlugin,
             'react-native-reanimated/plugin',
@@ -38,15 +29,10 @@ function importMetaTransformPlugin() {
                         parent.node.property.name === 'env'
                     ) {
                         parent.replaceWith(
-                            parent.scope.buildUndefinedNode()
-                                ? require('@babel/types').memberExpression(
-                                      require('@babel/types').identifier('process'),
-                                      require('@babel/types').identifier('env')
-                                  )
-                                : require('@babel/types').memberExpression(
-                                      require('@babel/types').identifier('process'),
-                                      require('@babel/types').identifier('env')
-                                  )
+                            require('@babel/types').memberExpression(
+                                require('@babel/types').identifier('process'),
+                                require('@babel/types').identifier('env')
+                            )
                         );
                     }
                 }

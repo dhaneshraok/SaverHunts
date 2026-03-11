@@ -8,21 +8,19 @@ if (Platform.OS !== 'web') {
     const Notifications = require('expo-notifications');
     const { supabase } = require('./supabase');
 
-    // Mocked coordinates for demonstration
-    const MOCK_GEOFENCES = [
-        {
-            store: 'Croma',
-            latitude: 19.0760,
-            longitude: 72.8777,
-            radius: 200,
-        },
-        {
-            store: 'Reliance Digital',
-            latitude: 28.6139,
-            longitude: 77.2090,
-            radius: 200,
+    // Geofences loaded from Supabase at task runtime
+    async function loadGeofences(): Promise<{ store: string; latitude: number; longitude: number; radius: number }[]> {
+        try {
+            const { data } = await supabase
+                .from('store_geofences')
+                .select('store, latitude, longitude, radius')
+                .eq('active', true);
+            return data || [];
+        } catch (e) {
+            console.error('Failed to load geofences:', e);
+            return [];
         }
-    ];
+    }
 
     function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
         const R = 6371e3;
@@ -47,8 +45,9 @@ if (Platform.OS !== 'web') {
             const { locations } = data as { locations: any[] };
             const latestLocation = locations[0];
 
+            const geofences = await loadGeofences();
             let nearStore = null;
-            for (const fence of MOCK_GEOFENCES) {
+            for (const fence of geofences) {
                 const dist = getDistance(latestLocation.coords.latitude, latestLocation.coords.longitude, fence.latitude, fence.longitude);
                 if (dist <= fence.radius) {
                     nearStore = fence.store;

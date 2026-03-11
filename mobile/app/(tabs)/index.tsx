@@ -1,1042 +1,947 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Alert, StyleSheet, Dimensions, Modal, Pressable } from 'react-native';
-import { YStack, XStack, Input, Button, Text, Spinner, ScrollView } from 'tamagui';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Alert, StyleSheet, Dimensions, TextInput, Platform,
+  TouchableOpacity, Modal, Share,
+} from 'react-native';
+import { YStack, XStack, Text, Spinner, ScrollView, View } from 'tamagui';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withDelay,
-  FadeInUp,
-  Easing,
+  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withDelay,
+  withSequence, FadeInUp, FadeInDown, FadeIn, Easing, interpolate,
 } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import { usePushNotifications } from '../../lib/notifications';
 import { useCartStore } from '../../store/cartStore';
-import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import ScannerModal from '../../components/ScannerModal';
 import ARTryOnModal from '../../components/ARTryOnModal';
 import ProductViewer360 from '../../components/ProductViewer360';
 import GroupDealSheet from '../../components/GroupDealSheet';
-import { useLocalSearchParams } from 'expo-router';
-import { storage } from '../../lib/storage';
+import SearchOverlay, { addRecentSearch } from '../../components/SearchOverlay';
+import VisualSearchModal from '../../components/VisualSearchModal';
+import QuickActionsMenu from '../../components/QuickActionsMenu';
+import { WishlistButton } from '../../components/WishlistButton';
+import ShareSheet from '../../components/ShareSheet';
+import { SkeletonSearchResults } from '../../components/SkeletonLoader';
+import { FlashDealBadge } from '../../components/DealTimer';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { storage, addRecentlyViewed, getRecentlyViewed, addSearchEntry, getTopSearchCategories, getRecentSearchQueries, RecentProduct } from '../../lib/storage';
+import { api } from '../../lib/api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AnimatedBackground from '../../components/AnimatedBackground';
+import { COLORS, PLATFORM_BRANDS, CATEGORIES } from '../../constants/Theme';
 
-const FASTAPI_URL = process.env.EXPO_PUBLIC_FASTAPI_URL || 'http://127.0.0.1:8000';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-// ─── Design Tokens ─────────────────────────────────────
-const COLORS = {
-  bgDeep: '#0F1117',
-  bgCard: '#161B22',
-  bgCardHover: '#1C2129',
-  bgInput: '#161B22',
-  borderSubtle: '#21262D',
-  borderInput: '#30363D',
-  gradientStart: '#2D1B69',
-  gradientMid: '#1A1A3E',
-  priceGreen: '#3FB950',
-  badgeBg: '#0D3B2E',
-  badgeText: '#3FB950',
-  textPrimary: '#F0F6FC',
-  textSecondary: '#8B949E',
-  textMuted: '#484F58',
-  accentBlue: '#58A6FF',
-  alertOrange: '#D97706',
-  alertOrangeBg: '#451A03',
-  badgeRed: '#DC2626',
-  badgeRedBg: '#450A0A',
-  fireOrange: '#FF7B00',
-  accentPurple: '#A855F7',
-};
+// CATEGORIES imported from Theme.ts
 
-// ─── Skeleton Shimmer ──────────────────────────────────
-function SkeletonCard({ delay = 0 }: { delay?: number }) {
-  const opacity = useSharedValue(0.3);
+// ─── Animated Floating Orb (lightweight version for home) ───
+function FloatingOrb({ color, size, top, left, delay: d }: { color: string; size: number; top: number; left: number; delay: number }) {
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    translateY.value = withDelay(d, withRepeat(withSequence(
+      withTiming(20, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
+      withTiming(-20, { duration: 4000, easing: Easing.inOut(Easing.ease) })
+    ), -1, true));
+    scale.value = withDelay(d, withRepeat(withSequence(
+      withTiming(1.15, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: 5000, easing: Easing.inOut(Easing.ease) })
+    ), -1, true));
+  }, []);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+  return (
+    <Animated.View style={[{ position: 'absolute', top, left, width: size, height: size, borderRadius: size / 2, opacity: 0.12 }, style]}>
+      <LinearGradient colors={[color, 'transparent']} style={{ width: '100%', height: '100%', borderRadius: size / 2 }} />
+    </Animated.View>
+  );
+}
+
+// ─── Premium Category Card ─────────────────────────────
+function CategoryCard({ cat, index, onPress }: { cat: { label: string; icon: string; gradient: readonly string[] }; index: number; onPress: () => void }) {
+  return (
+    <Animated.View entering={FadeInUp.delay(150 + index * 60).duration(500)}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={st.catCard}>
+        <View style={st.catIconWrap}>
+          <LinearGradient colors={cat.gradient as any} style={StyleSheet.absoluteFill} />
+          <MaterialCommunityIcons name={cat.icon as any} size={20} color="#FFF" />
+        </View>
+        <Text color="rgba(255,255,255,0.7)" fontSize={11} fontWeight="600" mt={6}>{cat.label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Premium Trending Card (Large, Immersive) ──────────
+function TrendingCard({ item, index }: { item: any; index: number }) {
+  const router = useRouter();
+  const discount = item.original_price_inr
+    ? Math.round(((item.original_price_inr - item.price_inr) / item.original_price_inr) * 100) : 0;
+  const saved = item.original_price_inr ? item.original_price_inr - item.price_inr : 0;
+
+  const navigateToDetail = () => {
+    const slug = (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80);
+    router.push({
+      pathname: '/product/[id]',
+      params: {
+        id: slug,
+        title: item.title || '',
+        price: String(item.price_inr || 0),
+        original_price: String(item.original_price_inr || 0),
+        image: item.image_url || '',
+        platform: item.platform || '',
+      },
+    });
+  };
+
+  return (
+    <Animated.View entering={FadeInUp.delay(200 + index * 120).duration(600)} style={{ width: SW * 0.78, marginRight: 16 }}>
+      <TouchableOpacity activeOpacity={0.9} style={st.trendCard} onPress={navigateToDetail}>
+        {/* Image section */}
+        <View style={st.trendImageWrap}>
+          <ExpoImage source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.9)']} style={[StyleSheet.absoluteFill, { top: '35%' }]} />
+
+          {/* Floating discount badge */}
+          {discount > 0 && (
+            <View style={st.trendDiscount}>
+              <LinearGradient colors={['#DC2626', '#991B1B']} style={StyleSheet.absoluteFill} />
+              <Text color="#FFF" fontSize={13} fontWeight="900">-{discount}%</Text>
+            </View>
+          )}
+
+          {/* Platform badge */}
+          <View style={[st.trendPlatform, { borderColor: item.color + '40' }]}>
+            <View style={[st.platformDot, { backgroundColor: item.color }]} />
+            <Text color="rgba(255,255,255,0.85)" fontSize={10} fontWeight="800">{item.platform}</Text>
+          </View>
+
+          {/* Bottom info overlay */}
+          <YStack style={st.trendOverlay}>
+            <Text color="rgba(255,255,255,0.5)" fontSize={11} fontWeight="600">{item.subtitle}</Text>
+            <Text color="#F0F6FC" fontSize={18} fontWeight="900" letterSpacing={-0.5} numberOfLines={1}>{item.title}</Text>
+            <XStack ai="center" gap="$2" mt={4}>
+              <Text color="#3FB950" fontSize={24} fontWeight="900" letterSpacing={-1}>
+                ₹{item.price_inr.toLocaleString('en-IN')}
+              </Text>
+              {item.original_price_inr && (
+                <Text color="rgba(255,255,255,0.25)" fontSize={14} textDecorationLine="line-through">
+                  ₹{item.original_price_inr.toLocaleString('en-IN')}
+                </Text>
+              )}
+              {saved > 0 && (
+                <View style={st.trendSaveBadge}>
+                  <Text color="#3FB950" fontSize={10} fontWeight="800">Save ₹{saved.toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+            </XStack>
+          </YStack>
+        </View>
+
+        {/* Action bar */}
+        <XStack px={16} py={12} ai="center" jc="space-between">
+          <XStack ai="center" gap={6}>
+            <MaterialCommunityIcons name="lightning-bolt" size={14} color="#FBBF24" />
+            <Text color="rgba(255,255,255,0.4)" fontSize={11} fontWeight="600">Lowest in 30 days</Text>
+          </XStack>
+          <View style={st.trendArrow}>
+            <MaterialCommunityIcons name="arrow-right" size={16} color="#A78BFA" />
+          </View>
+        </XStack>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── For You Grid Card (Premium) ────────────────────────
+function ForYouCard({ item, index }: { item: any; index: number }) {
+  const router = useRouter();
+  const discount = item.original_price_inr
+    ? Math.round(((item.original_price_inr - item.price_inr) / item.original_price_inr) * 100) : 0;
+
+  const navigateToDetail = () => {
+    const slug = (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80);
+    router.push({
+      pathname: '/product/[id]',
+      params: {
+        id: slug,
+        title: item.title || '',
+        price: String(item.price_inr || 0),
+        original_price: String(item.original_price_inr || 0),
+        image: item.image_url || '',
+        platform: item.platform || '',
+      },
+    });
+  };
+
+  return (
+    <Animated.View entering={FadeInUp.delay(300 + index * 80).duration(500)} style={{ width: (SW - 60) / 2, marginBottom: 14 }}>
+      <TouchableOpacity activeOpacity={0.85} style={st.gridCard} onPress={navigateToDetail}>
+        <View style={st.gridImageWrap}>
+          <ExpoImage source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={[StyleSheet.absoluteFill, { top: '50%' }]} />
+          {discount > 0 && (
+            <View style={st.gridDiscount}>
+              <Text color="#FFF" fontSize={10} fontWeight="900">-{discount}%</Text>
+            </View>
+          )}
+        </View>
+        <YStack p={12} gap={3}>
+          <Text color="rgba(255,255,255,0.4)" fontSize={9} fontWeight="700" textTransform="uppercase" letterSpacing={0.5}>{item.platform}</Text>
+          <Text color="#F0F6FC" fontSize={13} fontWeight="700" numberOfLines={1}>{item.title}</Text>
+          <XStack ai="center" gap={6} mt={2}>
+            <Text color="#3FB950" fontSize={17} fontWeight="900" letterSpacing={-0.3}>₹{item.price_inr.toLocaleString('en-IN')}</Text>
+            {item.original_price_inr && (
+              <Text color="rgba(255,255,255,0.2)" fontSize={11} textDecorationLine="line-through">₹{item.original_price_inr.toLocaleString('en-IN')}</Text>
+            )}
+          </XStack>
+        </YStack>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Hero Flash Deal ────────────────────────────────────
+function HeroDealBanner() {
+  const pulse = useSharedValue(0);
+  const shimmer = useSharedValue(0);
 
   useEffect(() => {
-    opacity.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(0.8, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
-      )
+    pulse.value = withRepeat(withSequence(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+      withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+    ), -1, true);
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 3000, easing: Easing.linear }), -1, false
     );
   }, []);
 
-  const shimmerStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+  const glowStyle = useAnimatedStyle(() => ({
+    shadowOpacity: 0.15 + pulse.value * 0.25,
+    shadowRadius: 12 + pulse.value * 15,
+  }));
+
+  const liveDotStyle = useAnimatedStyle(() => ({
+    opacity: 0.4 + pulse.value * 0.6,
+    transform: [{ scale: 0.8 + pulse.value * 0.4 }],
   }));
 
   return (
-    <Animated.View style={[styles.card, shimmerStyle]}>
-      <XStack gap="$3" ai="center" p="$4">
-        <Animated.View style={[styles.skeletonThumb]} />
-        <YStack f={1} gap="$2">
-          <Animated.View style={[styles.skeletonLine, { width: '75%' }]} />
-          <Animated.View style={[styles.skeletonLine, { width: '40%', height: 14 }]} />
-          <Animated.View style={[styles.skeletonBadge]} />
-        </YStack>
+    <Animated.View entering={FadeInUp.delay(200).duration(700)}>
+      <Animated.View style={[st.heroBanner, glowStyle, { shadowColor: '#8B5CF6' }]}>
+        <LinearGradient
+          colors={['rgba(139,92,246,0.15)', 'rgba(59,130,246,0.08)', 'rgba(0,0,0,0.3)']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        />
+
+        {/* Decorative orb */}
+        <View style={st.heroOrb}>
+          <LinearGradient colors={['rgba(139,92,246,0.3)', 'transparent']} style={{ width: '100%', height: '100%', borderRadius: 100 }} />
+        </View>
+
+        <XStack p={20} gap={16} ai="center">
+          {/* Product image */}
+          <View style={st.heroImageWrap}>
+            <ExpoImage source={{ uri: 'https://m.media-amazon.com/images/I/61SUj2aKoEL._SX679_.jpg' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+            {/* Image shine */}
+            <LinearGradient
+              colors={['transparent', 'rgba(255,255,255,0.15)', 'transparent']}
+              style={[StyleSheet.absoluteFill, { transform: [{ rotate: '45deg' }] }]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            />
+          </View>
+
+          <YStack f={1} gap={6}>
+            <XStack ai="center" gap={8}>
+              <Animated.View style={[st.liveDot, liveDotStyle]} />
+              <Text color="#A78BFA" fontSize={10} fontWeight="900" textTransform="uppercase" letterSpacing={1.5}>Flash Deal</Text>
+              <FlashDealBadge expiresAt={Math.floor(Date.now() / 1000) + 4 * 3600 + 32 * 60} compact />
+            </XStack>
+
+            <Text color="#F0F6FC" fontSize={16} fontWeight="900" numberOfLines={1} letterSpacing={-0.3}>
+              AirPods Pro (2nd Gen)
+            </Text>
+
+            <XStack ai="center" gap={8}>
+              <Text color="#3FB950" fontSize={26} fontWeight="900" letterSpacing={-1}>₹9,999</Text>
+              <Text color="rgba(255,255,255,0.2)" fontSize={14} textDecorationLine="line-through">₹24,900</Text>
+            </XStack>
+
+            {/* Claim progress */}
+            <XStack ai="center" gap={8} mt={2}>
+              <View style={st.claimBar}>
+                <Animated.View style={[st.claimFill, { width: '78%' }]}>
+                  <LinearGradient colors={['#8B5CF6', '#6D28D9']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+                </Animated.View>
+              </View>
+              <Text color="rgba(255,255,255,0.35)" fontSize={10} fontWeight="700">78%</Text>
+            </XStack>
+          </YStack>
+        </XStack>
+
+        {/* CTA */}
+        <TouchableOpacity activeOpacity={0.85} style={st.heroCTA}>
+          <LinearGradient colors={['#8B5CF6', '#6D28D9']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+          <Text color="#FFF" fontWeight="900" fontSize={14} letterSpacing={0.5}>CLAIM THIS DEAL</Text>
+          <MaterialCommunityIcons name="arrow-right" size={16} color="#FFF" />
+        </TouchableOpacity>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+// ─── Section Title ──────────────────────────────────────
+function SectionTitle({ title, subtitle, icon, delay = 0, action }: {
+  title: string; subtitle?: string; icon: string; delay?: number; action?: string;
+}) {
+  return (
+    <Animated.View entering={FadeInUp.delay(delay).duration(500)}>
+      <XStack ai="center" jc="space-between" mb={16}>
+        <XStack ai="center" gap={10}>
+          <View style={st.sectionIcon}>
+            <LinearGradient colors={['rgba(139,92,246,0.15)', 'rgba(59,130,246,0.08)']} style={StyleSheet.absoluteFill} />
+            <MaterialCommunityIcons name={icon as any} size={16} color="#A78BFA" />
+          </View>
+          <YStack>
+            <Text color="#F0F6FC" fontSize={18} fontWeight="900" letterSpacing={-0.3}>{title}</Text>
+            {subtitle && <Text color="rgba(255,255,255,0.3)" fontSize={11} fontWeight="500">{subtitle}</Text>}
+          </YStack>
+        </XStack>
+        {action && (
+          <TouchableOpacity style={st.seeAllBtn}>
+            <Text color="#A78BFA" fontSize={12} fontWeight="700">{action}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={14} color="#A78BFA" />
+          </TouchableOpacity>
+        )}
       </XStack>
     </Animated.View>
   );
 }
 
-// ─── Mini Skeleton Shimmer ─────────────────────────────
-function MiniSkeletonCard({ delay = 0 }: { delay?: number }) {
-  const opacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    opacity.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(0.8, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
-      )
-    );
-  }, []);
-
-  const shimmerStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View style={[{ width: 140, marginRight: 16, backgroundColor: COLORS.bgCard, borderRadius: 12, borderWidth: 1, borderColor: COLORS.borderSubtle, overflow: 'hidden' }, shimmerStyle]}>
-      <Animated.View style={{ width: '100%', height: 120, backgroundColor: COLORS.bgCardHover }} />
-      <YStack p="$2" gap="$2">
-        <Animated.View style={{ height: 10, width: '40%', backgroundColor: COLORS.bgCardHover, borderRadius: 4 }} />
-        <Animated.View style={{ height: 14, width: '80%', backgroundColor: COLORS.bgCardHover, borderRadius: 4 }} />
-        <Animated.View style={{ height: 16, width: '60%', backgroundColor: COLORS.bgCardHover, borderRadius: 4 }} />
-        <Animated.View style={{ height: 28, width: '100%', backgroundColor: COLORS.bgCardHover, borderRadius: 8, marginTop: 4 }} />
-      </YStack>
-    </Animated.View>
-  );
-}
-
-// ─── Product Card ──────────────────────────────────────
-function ProductCard({ item, index, pushToken }: { item: any; index: number; pushToken: string | null }) {
-  const scale = useSharedValue(1);
-  const animatedScaleStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }]
-  }));
-
-  // FOMO Engine: Simulate Live Viewers based on item
-  const [liveViewers] = useState(Math.floor(Math.random() * 80) + 12);
-
+// ─── Search Result Card (Premium) ───────────────────────
+function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onTap, onShare }: {
+  item: any; index: number; pushToken: string | null; priceStats?: any; onLongPress?: () => void; onTap?: (item: any) => void; onShare?: (item: any) => void;
+}) {
+  const addItem = useCartStore((state) => state.addItem);
+  const router = useRouter();
+  const [isAdded, setIsAdded] = useState(false);
+  const [isArVisible, setIsArVisible] = useState(false);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [isGroupDealVisible, setIsGroupDealVisible] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [aiSummary, setAiSummary] = useState<any>(null);
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [aiPrediction, setAiPrediction] = useState<any>(null);
   const [isAlertSubscribed, setIsAlertSubscribed] = useState(false);
   const [isAlertSubscribing, setIsAlertSubscribing] = useState(false);
 
-  // AI State
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [aiSummary, setAiSummary] = useState<{ pros: string[], cons: string[], eco_score?: number, eco_summary?: string } | null>(null);
+  const slug = useMemo(() => (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80), [item.title]);
 
-  const [isPredicting, setIsPredicting] = useState(false);
-  const [aiPrediction, setAiPrediction] = useState<{ recommendation: string, confidence_percent: number, reasoning: string } | null>(null);
+  const navigateToDetail = () => {
+    onTap?.(item);
+    router.push({
+      pathname: '/product/[id]',
+      params: {
+        id: slug,
+        title: item.title || '',
+        price: String(item.price_inr || 0),
+        original_price: String(item.original_price_inr || 0),
+        image: item.image_url || '',
+        platform: item.platform || '',
+      },
+    });
+  };
 
-  // AR State
-  const [isArVisible, setIsArVisible] = useState(false);
-
-  // 360° Viewer State
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
-
-  // Group Deal State
-  const [isGroupDealVisible, setIsGroupDealVisible] = useState(false);
-  const [activeDealProduct, setActiveDealProduct] = useState<any>(null);
-
-  // Cart Logic
-  const addItem = useCartStore((state) => state.addItem);
-  const [isAdded, setIsAdded] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-
-  // Mock generating a "was price" higher than the current price if the model detects 'original_price_inr'
-  // using item.original_price_inr directly if available from SerpAPI fallback
   const wasPrice = item.original_price_inr || (item.price_inr ? item.price_inr * 1.2 : null);
-
-  // Search local params (for deep links)
-  const params = useLocalSearchParams();
-
-  useEffect(() => {
-    // This useEffect block is missing some state variables like `setSession`, `setUser`, `checkAlertStatus`
-    // which are likely defined in the parent component or context.
-    // For the purpose of this edit, we'll assume they exist or are placeholders.
-    // If this is part of a larger component, these would need to be properly defined.
-    // Example: const [session, setSession] = useState(null); const [user, setUser] = useState(null);
-    // And checkAlertStatus would be a function defined in this scope.
-
-    // Placeholder for missing state/functions for compilation
-    const setSession = (s: any) => { };
-    const setUser = (u: any) => { };
-    const checkAlertStatus = async (userId: string) => { };
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user?.id) {
-        checkAlertStatus(session.user.id);
-      }
-    });
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user ?? null;
-      setSession(session);
-      setUser(user);
-      if (user?.id) {
-        checkAlertStatus(user.id);
-      }
-    });
-  }, []);
-
-  // Handle incoming deep links (e.g. from a Group Deal invite)
-  useEffect(() => {
-    if (params.teamDealId && typeof params.teamDealId === 'string') {
-      // Open the group deal sheet with the ID from the URL
-      setActiveDealProduct(null); // We just have the ID, fetch happens in the sheet
-      setIsGroupDealVisible(true);
-    }
-  }, [params.teamDealId]);
-
-  const handleShareToCommunity = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      setIsSharing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        Alert.alert("Sign In Required", "Join the community by signing in on the Profile tab first!");
-        setIsSharing(false);
-        return;
-      }
-
-      const res = await fetch(`${FASTAPI_URL}/api/v1/community/deals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: session.user.id,
-          product_title: item.title,
-          price_inr: item.price_inr,
-          original_price_inr: item.original_price_inr,
-          image_url: item.image_url,
-          platform: item.platform,
-          url: item.product_url
-        })
-      });
-
-      if (res.ok) {
-        Alert.alert("Success", "🔥 Massive deal shared to the community board!");
-      } else {
-        const err = await res.json();
-        Alert.alert("Error", err.error || "Failed to share deal");
-      }
-    } catch (e) {
-      Alert.alert("Error", "Could not connect to community board");
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
-  const handleSummarize = async () => {
-    if (aiSummary) return; // Already fetched
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsSummarizing(true);
-    try {
-      const res = await fetch(`${FASTAPI_URL}/api/v1/ai/summarize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_title: item.title,
-          platform: item.platform || 'Unknown',
-          price_inr: item.price_inr
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiSummary(data);
-      } else {
-        Alert.alert("Error", "Could not generate AI summary");
-      }
-    } catch (e) {
-      Alert.alert("Error", "Network error reaching AI service");
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  const handlePredict = async () => {
-    if (aiPrediction) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsPredicting(true);
-    try {
-      const res = await fetch(`${FASTAPI_URL}/api/v1/ai/predict`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: item.title,
-          current_price_inr: item.price_inr,
-          platform: item.platform || 'Unknown',
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiPrediction(data);
-      } else {
-        Alert.alert("Error", "Could not generate price forecast");
-      }
-    } catch (e) {
-      Alert.alert("Error", "Network error reaching forecast service");
-    } finally {
-      setIsPredicting(false);
-    }
-  };
-
-  const handleAlertMe = async () => {
-    if (!pushToken) {
-      Alert.alert('Push Notifications Required', 'Please enable push notifications in settings to receive price alerts.');
-      return;
-    }
-
-    setIsAlertSubscribing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
-    try {
-      const response = await fetch(`${FASTAPI_URL}/api/v1/alerts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: item.title, // Or pass down the original search query if preferred
-          target_price: item.price_inr,
-          push_token: pushToken
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setIsAlertSubscribed(true);
-        Alert.alert(
-          'Alert Subscribed! 🔔',
-          `We'll notify your phone as soon as ${item.title?.substring(0, 20)}... drops below ₹${item.price_inr?.toLocaleString()}`
-        );
-      } else {
-        throw new Error(data.error || 'Failed to subscribe to alert');
-      }
-    } catch (error: any) {
-      console.error('Error subscribing to alert:', error);
-      Alert.alert('Error', error.message || 'Could not connect to the alerts server.');
-    } finally {
-      setIsAlertSubscribing(false);
-    }
-  };
+  const discount = wasPrice ? Math.round(((wasPrice - item.price_inr) / wasPrice) * 100) : 0;
+  const hasLongPress = !!onLongPress;
 
   const handleAddToCart = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    addItem(item);
-    setIsAdded(true);
-    // Reset back to Add to Cart after 2 seconds
-    setTimeout(() => setIsAdded(false), 2000);
+    addItem(item); setIsAdded(true); setTimeout(() => setIsAdded(false), 2000);
+  };
+  const handleAlertMe = async () => {
+    if (!pushToken) { Alert.alert('Push Required', 'Enable push notifications for price alerts.'); return; }
+    setIsAlertSubscribing(true);
+    try {
+      const res = await api.createAlert(item.title, item.price_inr, pushToken);
+      if (res.status === 'success') { setIsAlertSubscribed(true); }
+    } catch (e) { /* skip */ } finally { setIsAlertSubscribing(false); }
+  };
+  const handleSummarize = async () => {
+    if (aiSummary) return; setIsSummarizing(true);
+    try {
+      const res = await api.aiSummarize(item.title, item.platform || 'Unknown', item.price_inr);
+      if (res.status === 'success' && res.data) setAiSummary(res.data);
+    } catch (e) { /* skip */ } finally { setIsSummarizing(false); }
+  };
+  const handlePredict = async () => {
+    if (aiPrediction) return; setIsPredicting(true);
+    try {
+      const res = await api.aiPredict(item.title, item.price_inr, item.platform || 'Unknown');
+      if (res.status === 'success' && res.data) setAiPrediction(res.data);
+    } catch (e) { /* skip */ } finally { setIsPredicting(false); }
   };
 
   return (
-    <Animated.View
-      entering={FadeInUp.delay(index * 120).duration(500).springify()}
-      style={[styles.card, animatedScaleStyle]}
-    >
-      <Pressable
-        onPressIn={() => {
-          scale.value = withTiming(0.97, { duration: 150, easing: Easing.out(Easing.ease) });
-        }}
-        onPressOut={() => {
-          scale.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.ease) });
-        }}
-      >
-        <YStack>
-          {/* Best Price Badge */}
-          {wasPrice && (
-            <XStack backgroundColor={COLORS.badgeRedBg} px="$4" py="$2" ai="center" gap="$2" style={{ borderBottomWidth: 1, borderBottomColor: COLORS.borderSubtle }}>
-              <Text color={COLORS.badgeRed} fontSize={12} fontWeight="900">🔥 BEST PRICE EVER!</Text>
-              <Text color={COLORS.textSecondary} fontSize={12} textDecorationLine="line-through">
-                ₹{Math.round(wasPrice).toLocaleString('en-IN')}
-              </Text>
-            </XStack>
-          )}
+    <Animated.View entering={FadeInUp.delay(index * 100).duration(500)} style={{ marginBottom: 14 }}>
+      <TouchableOpacity activeOpacity={0.95} onLongPress={onLongPress} delayLongPress={400} style={st.resultCard}>
+        {/* Hot deal banner */}
+        {discount > 15 && (
+          <View style={st.resultBanner}>
+            <LinearGradient colors={['rgba(220,38,38,0.15)', 'rgba(220,38,38,0.03)']} style={StyleSheet.absoluteFill} />
+            <MaterialCommunityIcons name="fire" size={12} color="#DC2626" />
+            <Text color="#DC2626" fontSize={11} fontWeight="900" ml={4}>BEST PRICE</Text>
+            {wasPrice && <Text color="rgba(255,255,255,0.25)" fontSize={11} textDecorationLine="line-through" ml="auto">₹{Math.round(wasPrice).toLocaleString('en-IN')}</Text>}
+          </View>
+        )}
 
-          <XStack gap="$3" ai="center" p="$4">
-            {/* Thumbnail */}
-            <YStack
-              width={72}
-              height={72}
-              borderRadius={14}
-              overflow="hidden"
-              backgroundColor={COLORS.bgCardHover}
-              onPress={() => setIsViewerOpen(true)}
-              pressStyle={{ opacity: 0.8 }}
-            >
+        <XStack p={16} gap={14}>
+          {/* Product image */}
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setIsViewerOpen(true)}>
+            <View style={st.resultImage}>
               {item.image_url ? (
-                <ExpoImage
-                  source={{ uri: item.image_url }}
-                  style={{ width: 72, height: 72 }}
-                  contentFit="cover"
-                  transition={600}
-                />
+                <ExpoImage source={{ uri: item.image_url }} style={{ width: 88, height: 88 }} contentFit="cover" transition={400} />
               ) : (
-                <YStack f={1} ai="center" jc="center">
-                  <Text color={COLORS.textMuted} fontSize={10}>No img</Text>
-                </YStack>
+                <MaterialCommunityIcons name="image-off-outline" size={24} color="rgba(255,255,255,0.1)" />
               )}
-              {/* Quick View Overlay */}
-              {item.image_url && (
-                <YStack
-                  position="absolute"
-                  bottom={0}
-                  left={0}
-                  right={0}
-                  backgroundColor="rgba(0,0,0,0.55)"
-                  ai="center"
-                  py="$1"
-                >
-                  <Text color="white" fontSize={8} fontWeight="800" letterSpacing={0.5}>🔍 VIEW</Text>
-                </YStack>
-              )}
-            </YStack>
+            </View>
+          </TouchableOpacity>
 
-            {/* Details */}
-            <YStack f={1} gap="$1">
-              <Text
-                color={COLORS.textPrimary}
-                fontSize={15}
-                fontWeight="600"
-                numberOfLines={2}
-              >
-                {item.title || 'Untitled Product'}
-              </Text>
+          {/* Wishlist heart (top-right of card row) */}
+          <View style={st.wishlistCorner}>
+            <WishlistButton product={{ slug, title: item.title || '', price: item.price_inr || 0, originalPrice: item.original_price_inr, imageUrl: item.image_url, platform: item.platform }} size={20} />
+          </View>
 
-              <XStack ai="center" gap="$2" mt="$1">
-                <Text color={COLORS.priceGreen} fontSize={20} fontWeight="900" letterSpacing={-0.5}>
-                  ₹{item.price_inr?.toLocaleString('en-IN') || 'N/A'}
-                </Text>
-                {item.is_fake_sale && (
-                  <YStack
-                    backgroundColor="rgba(220, 38, 38, 0.15)"
-                    px="$2" py="$1"
-                    borderRadius={8}
-                    borderWidth={1}
-                    borderColor="#DC2626"
-                    shadowColor="#DC2626"
-                    shadowOffset={{ width: 0, height: 0 }}
-                    shadowOpacity={0.4}
-                    shadowRadius={8}
-                  >
-                    <XStack ai="center" gap="$1">
-                      <Text fontSize={10}>🚨</Text>
-                      <Text color="#DC2626" fontSize={10} fontWeight="900" letterSpacing={0.5}>FAKE SALE</Text>
-                    </XStack>
-                  </YStack>
-                )}
-              </XStack>
-              {item.original_price_inr && !item.is_fake_sale && (
-                <Text color={COLORS.textSecondary} fontSize={14} textDecorationLine="line-through">
-                  ₹{item.original_price_inr.toLocaleString('en-IN')}
-                </Text>
-              )}
-
+          <TouchableOpacity onPress={navigateToDetail} activeOpacity={0.8} style={{ flex: 1 }}>
+            <YStack f={1} gap={4}>
               {item.platform && (
-                <XStack mt="$1" ai="center" jc="space-between">
-                  <YStack
-                    backgroundColor={COLORS.badgeBg}
-                    paddingHorizontal="$2"
-                    paddingVertical="$1"
-                    borderRadius={6}
-                  >
-                    <Text
-                      color={COLORS.badgeText}
-                      fontSize={11}
-                      fontWeight="700"
-                      textTransform="capitalize"
-                    >
-                      {item.platform}
-                    </Text>
-                  </YStack>
-
-                  {/* FOMO Live Viewers */}
-                  <XStack ai="center" gap="$1">
-                    <YStack width={6} height={6} borderRadius={3} backgroundColor={COLORS.badgeRed} />
-                    <Text color={COLORS.badgeRed} fontSize={10} fontWeight="800">
-                      👀 {liveViewers} LOOKING
-                    </Text>
-                  </XStack>
+                <XStack ai="center" gap={4}>
+                  <View style={[st.resultPlatformDot, { backgroundColor: '#A78BFA' }]} />
+                  <Text color="rgba(255,255,255,0.4)" fontSize={10} fontWeight="700" textTransform="uppercase">{item.platform}</Text>
                 </XStack>
               )}
+              <Text color="#F0F6FC" fontSize={15} fontWeight="800" numberOfLines={2} lineHeight={20}>{item.title || 'Untitled Product'}</Text>
+              <XStack ai="center" gap={8} mt={2}>
+                <Text color="#3FB950" fontSize={22} fontWeight="900" letterSpacing={-0.5}>₹{item.price_inr?.toLocaleString('en-IN') || 'N/A'}</Text>
+                {item.is_fake_sale && (
+                  <View style={st.fakeSaleBadge}>
+                    <MaterialCommunityIcons name="alert" size={10} color="#DC2626" />
+                    <Text color="#DC2626" fontSize={9} fontWeight="900" ml={3}>INFLATED</Text>
+                  </View>
+                )}
+                <BuySignalBadge item={item} priceStats={priceStats} />
+              </XStack>
+              <XStack ai="center" gap={4} mt={4}>
+                <Text color="rgba(167,139,250,0.6)" fontSize={10} fontWeight="700">Compare prices across stores</Text>
+                <MaterialCommunityIcons name="chevron-right" size={12} color="rgba(167,139,250,0.6)" />
+              </XStack>
             </YStack>
-          </XStack>
+          </TouchableOpacity>
+        </XStack>
 
-          {/* AI Prediction View */}
-          {aiPrediction && (
-            <Animated.View entering={FadeInUp.duration(400)}>
-              <YStack px="$4" pb="$3">
-                <XStack backgroundColor={COLORS.bgDeep} p="$3" borderRadius={12} borderWidth={1} borderColor={aiPrediction.recommendation === 'BUY NOW' ? COLORS.priceGreen : COLORS.alertOrange} ai="center" gap="$3">
-                  <Text fontSize={32}>{aiPrediction.recommendation === 'BUY NOW' ? '🛍️' : '⏳'}</Text>
-                  <YStack f={1}>
-                    <XStack ai="center" gap="$2">
-                      <Text color={aiPrediction.recommendation === 'BUY NOW' ? COLORS.priceGreen : COLORS.alertOrange} fontWeight="900" fontSize={16}>
-                        {aiPrediction.recommendation}
-                      </Text>
-                      <YStack backgroundColor={COLORS.borderSubtle} px="$2" borderRadius={10}>
-                        <Text color={COLORS.textSecondary} fontSize={11} fontWeight="bold">{aiPrediction.confidence_percent}% Confidence</Text>
-                      </YStack>
-                    </XStack>
-                    <Text color={COLORS.textPrimary} fontSize={13} mt="$1">{aiPrediction.reasoning}</Text>
+        {/* AI Prediction */}
+        {aiPrediction && (
+          <Animated.View entering={FadeIn.duration(300)}>
+            <View style={[st.aiCard, { borderLeftColor: aiPrediction.recommendation === 'BUY NOW' ? '#3FB950' : '#D97706', borderLeftWidth: 3 }]}>
+              <MaterialCommunityIcons name={aiPrediction.recommendation === 'BUY NOW' ? 'cart-check' : 'clock-outline'} size={18} color={aiPrediction.recommendation === 'BUY NOW' ? '#3FB950' : '#D97706'} />
+              <YStack f={1} ml={10}>
+                <XStack ai="center" gap={8}>
+                  <Text color={aiPrediction.recommendation === 'BUY NOW' ? '#3FB950' : '#D97706'} fontWeight="900" fontSize={13}>{aiPrediction.recommendation}</Text>
+                  <Text color="rgba(255,255,255,0.25)" fontSize={10} fontWeight="700">{aiPrediction.confidence_percent}% confidence</Text>
+                </XStack>
+                <Text color="rgba(255,255,255,0.45)" fontSize={11} mt={3}>{aiPrediction.reasoning}</Text>
+              </YStack>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* AI Summary */}
+        {aiSummary && (
+          <Animated.View entering={FadeIn.duration(300)}>
+            <View style={st.aiCard}>
+              <YStack f={1}>
+                <XStack ai="center" gap={6} mb={8}>
+                  <MaterialCommunityIcons name="auto-fix" size={14} color="#A855F7" />
+                  <Text color="#A855F7" fontWeight="800" fontSize={12}>AI Analysis</Text>
+                </XStack>
+                <XStack gap={12}>
+                  <YStack f={1} gap={4}>
+                    {aiSummary.pros?.map((p: string, i: number) => (
+                      <XStack key={`p${i}`} gap={6}><Text color="#3FB950" fontSize={11}>+</Text><Text color="rgba(255,255,255,0.5)" fontSize={11} f={1}>{p}</Text></XStack>
+                    ))}
+                  </YStack>
+                  <YStack f={1} gap={4}>
+                    {aiSummary.cons?.map((c: string, i: number) => (
+                      <XStack key={`c${i}`} gap={6}><Text color="#DC2626" fontSize={11}>-</Text><Text color="rgba(255,255,255,0.5)" fontSize={11} f={1}>{c}</Text></XStack>
+                    ))}
                   </YStack>
                 </XStack>
               </YStack>
-            </Animated.View>
-          )}
+            </View>
+          </Animated.View>
+        )}
 
-          {/* AI Summary View */}
-          {aiSummary && (
-            <Animated.View entering={FadeInUp.duration(400)}>
-              <YStack px="$4" pb="$3" gap="$3">
-                <YStack backgroundColor={COLORS.bgDeep} p="$3" borderRadius={12} borderWidth={1} borderColor={COLORS.borderSubtle}>
-                  <XStack mb="$2" ai="center" gap="$2">
-                    <Text fontSize={16}>✨</Text>
-                    <Text color="#A855F7" fontWeight="bold" fontSize={14}>Gemini Summary</Text>
-                  </XStack>
-                  <XStack gap="$4">
-                    <YStack f={1} gap="$1">
-                      <Text color={COLORS.priceGreen} fontSize={12} fontWeight="bold" mb="$1">PROS</Text>
-                      {aiSummary.pros.map((pro, i) => (
-                        <XStack key={`pro-${i}`} gap="$2">
-                          <Text color={COLORS.priceGreen} fontSize={12}>•</Text>
-                          <Text color={COLORS.textPrimary} fontSize={12} f={1}>{pro}</Text>
-                        </XStack>
-                      ))}
-                    </YStack>
-                    <YStack f={1} gap="$1">
-                      <Text color={COLORS.badgeRed} fontSize={12} fontWeight="bold" mb="$1">CONS</Text>
-                      {aiSummary.cons.map((con, i) => (
-                        <XStack key={`con-${i}`} gap="$2">
-                          <Text color={COLORS.badgeRed} fontSize={12}>•</Text>
-                          <Text color={COLORS.textPrimary} fontSize={12} f={1}>{con}</Text>
-                        </XStack>
-                      ))}
-                    </YStack>
-                  </XStack>
-                  {aiSummary.eco_score !== undefined && (
-                    <YStack mt="$3" pt="$3" borderTopWidth={1} borderTopColor={COLORS.borderSubtle}>
-                      <XStack ai="center" gap="$2" mb="$1">
-                        <Text fontSize={14}>🍃</Text>
-                        <Text color={COLORS.priceGreen} fontWeight="bold" fontSize={12}>
-                          Eco Score: {aiSummary.eco_score}/10
-                        </Text>
-                        {aiSummary.eco_score >= 8 && (
-                          <YStack backgroundColor="rgba(46, 160, 67, 0.15)" px="$2" py="$1" borderRadius={4}>
-                            <Text color={COLORS.priceGreen} fontSize={10} fontWeight="bold">Sustainable Choice</Text>
-                          </YStack>
-                        )}
-                      </XStack>
-                      <Text color={COLORS.textSecondary} fontSize={12}>{aiSummary.eco_summary}</Text>
-                    </YStack>
-                  )}
-                </YStack>
-              </YStack>
-            </Animated.View>
-          )}
+        {/* Action buttons */}
+        <XStack px={14} pb={14} gap={6} flexWrap="wrap">
+          {[
+            { label: isAdded ? 'Added' : 'Cart', icon: isAdded ? 'check' : 'cart-plus', color: isAdded ? '#3FB950' : '#58A6FF', onPress: handleAddToCart, disabled: isAdded },
+            { label: 'Share', icon: 'share-variant', color: '#8B5CF6', onPress: () => onShare?.(item) },
+            { label: 'Group', icon: 'account-group', color: '#A855F7', onPress: () => setIsGroupDealVisible(true) },
+            { label: isAlertSubscribed ? 'Active' : 'Alert', icon: isAlertSubscribed ? 'bell-check' : 'bell-ring-outline', color: isAlertSubscribed ? '#3FB950' : '#D97706', onPress: handleAlertMe, disabled: isAlertSubscribed, loading: isAlertSubscribing },
+            { label: aiSummary ? 'Done' : 'AI', icon: 'auto-fix', color: '#8B5CF6', onPress: handleSummarize, disabled: isSummarizing || !!aiSummary, loading: isSummarizing },
+            { label: aiPrediction ? 'Done' : 'Forecast', icon: 'chart-timeline-variant', color: '#3FB950', onPress: handlePredict, disabled: isPredicting || !!aiPrediction, loading: isPredicting },
+          ].map((btn) => (
+            <TouchableOpacity
+              key={btn.label}
+              style={[st.actionBtn, { backgroundColor: btn.color + '12', borderColor: btn.color + '20' }]}
+              onPress={btn.onPress}
+              disabled={btn.disabled}
+              activeOpacity={0.7}
+            >
+              {btn.loading ? <Spinner size="small" color={btn.color} /> : <MaterialCommunityIcons name={btn.icon as any} size={13} color={btn.color} />}
+              <Text color={btn.color} fontSize={11} fontWeight="700" ml={5}>{btn.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </XStack>
+      </TouchableOpacity>
 
-          <YStack px="$4" pb="$4" pt="$1" gap="$3">
-            {/* Row 1: Primary Actions */}
-            <XStack gap="$3">
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor={COLORS.accentPurple}
-                pressStyle={{ opacity: 0.8 }}
-                borderRadius={8}
-                onPress={() => {
-                  setActiveDealProduct(item);
-                  setIsGroupDealVisible(true);
-                }}
-                icon={<Text fontSize={14}>🤝</Text>}
-              >
-                <Text color="#000" fontWeight="900" fontSize={13}>
-                  Team Up & Save
-                </Text>
-              </Button>
-
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor={isAdded ? COLORS.badgeBg : COLORS.accentBlue}
-                pressStyle={{ opacity: 0.8 }}
-                borderRadius={8}
-                onPress={handleAddToCart}
-                disabled={isAdded}
-                icon={isAdded ? <Text fontSize={14}>✓</Text> : <Text fontSize={14}>🛒</Text>}
-              >
-                <Text color="white" fontWeight="700" fontSize={13}>
-                  {isAdded ? 'Added' : 'Add to Cart'}
-                </Text>
-              </Button>
-
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor={isAlertSubscribed ? COLORS.bgCardHover : COLORS.alertOrangeBg}
-                borderColor={isAlertSubscribed ? COLORS.borderSubtle : COLORS.alertOrange}
-                borderWidth={1}
-                borderRadius={8}
-                onPress={handleAlertMe}
-                disabled={isAlertSubscribed || isAlertSubscribing}
-                icon={
-                  isAlertSubscribing ? <Spinner size="small" color={COLORS.alertOrange} /> :
-                    isAlertSubscribed ? undefined : <Text fontSize={14}>🔔</Text>
-                }
-              >
-                <Text color={isAlertSubscribed ? COLORS.textSecondary : COLORS.alertOrange} fontWeight="700" fontSize={13}>
-                  {isAlertSubscribing ? 'Subscribing...' :
-                    isAlertSubscribed ? 'Alert Active ✓' : 'Alert Me'}
-                </Text>
-              </Button>
-            </XStack>
-
-            {/* Row 2: Secondary / Fun Actions */}
-            <XStack gap="$3">
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor="transparent"
-                borderColor={COLORS.fireOrange}
-                borderWidth={1}
-                borderRadius={8}
-                onPress={handleShareToCommunity}
-                disabled={isSharing}
-                icon={isSharing ? <Spinner size="small" color={COLORS.fireOrange} /> : <Text fontSize={14}>📢</Text>}
-              >
-                <Text color={COLORS.fireOrange} fontWeight="700" fontSize={13}>
-                  Share
-                </Text>
-              </Button>
-
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor="transparent"
-                borderColor="#A855F7"
-                borderWidth={1}
-                borderRadius={8}
-                onPress={handleSummarize}
-                disabled={isSummarizing || aiSummary !== null}
-                icon={isSummarizing ? <Spinner size="small" color="#A855F7" /> : <Text fontSize={14}>✨</Text>}
-              >
-                <Text color="#A855F7" fontWeight="700" fontSize={13}>
-                  {isSummarizing ? 'Thinking' : aiSummary ? 'Analyzed' : 'Review'}
-                </Text>
-              </Button>
-
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor="transparent"
-                borderColor={COLORS.priceGreen}
-                borderWidth={1}
-                borderRadius={8}
-                onPress={handlePredict}
-                disabled={isPredicting || aiPrediction !== null}
-                icon={isPredicting ? <Spinner size="small" color={COLORS.priceGreen} /> : <Text fontSize={14}>🔮</Text>}
-              >
-                <Text color={COLORS.priceGreen} fontWeight="700" fontSize={13}>
-                  {isPredicting ? 'Forecasting' : aiPrediction ? 'Forecasted' : 'Forecast'}
-                </Text>
-              </Button>
-
-              <Button
-                f={1}
-                size="$3"
-                backgroundColor="transparent"
-                borderColor={COLORS.textSecondary}
-                borderWidth={1}
-                borderRadius={8}
-                onPress={() => setIsArVisible(true)}
-                icon={<Text fontSize={14}>📷</Text>}
-              >
-                <Text color={COLORS.textPrimary} fontWeight="700" fontSize={13}>
-                  Try On
-                </Text>
-              </Button>
-            </XStack>
-          </YStack>
-        </YStack>
-      </Pressable>
-
-      {/* AR Modal */}
-      <ARTryOnModal
-        visible={isArVisible}
-        onClose={() => setIsArVisible(false)}
-        imageUrl={item.image_url}
-        productTitle={item.title}
-      />
-
-      {/* 360° Product Viewer */}
-      <ProductViewer360
-        visible={isViewerOpen}
-        onClose={() => setIsViewerOpen(false)}
-        images={item.image_url ? [item.image_url] : []}
-        title={item.title || 'Product'}
-        price={item.price_inr}
-        platform={item.platform}
-        url={item.product_url}
-        onARPress={() => { setIsViewerOpen(false); setTimeout(() => setIsArVisible(true), 300); }}
-      />
-
-      {/* Group Deal Sheet */}
-      <GroupDealSheet
-        visible={isGroupDealVisible}
-        onClose={() => {
-          setIsGroupDealVisible(false);
-          setActiveDealProduct(null);
-        }}
-        product={activeDealProduct}
-      />
+      <ARTryOnModal visible={isArVisible} onClose={() => setIsArVisible(false)} imageUrl={item.image_url} productTitle={item.title} />
+      <ProductViewer360 visible={isViewerOpen} onClose={() => setIsViewerOpen(false)} images={item.image_url ? [item.image_url] : []} title={item.title || 'Product'} price={item.price_inr} platform={item.platform} url={item.product_url} onARPress={() => { setIsViewerOpen(false); setTimeout(() => setIsArVisible(true), 300); }} />
+      <GroupDealSheet visible={isGroupDealVisible} onClose={() => setIsGroupDealVisible(false)} product={item} />
     </Animated.View>
   );
 }
 
-// ─── Price Stats Banner ────────────────────────────────
+// ─── Price Stats Banner ─────────────────────────────────
 function PriceStatsBanner({ stats }: { stats: any }) {
   if (!stats) return null;
-
   const isDropping = stats.price_trend === 'dropping';
-  const isRising = stats.price_trend === 'rising';
-
-  const trendColor = isDropping ? COLORS.priceGreen : isRising ? COLORS.badgeRed : COLORS.textSecondary;
-  const trendIcon = isDropping ? '📉 Dropping' : isRising ? '📈 Rising' : '➖ Stable';
-
+  const trendColor = isDropping ? '#3FB950' : stats.price_trend === 'rising' ? '#DC2626' : 'rgba(255,255,255,0.4)';
   return (
-    <Animated.View entering={FadeInUp.delay(350).duration(500)} style={{ marginBottom: 16 }}>
-      <YStack backgroundColor={COLORS.bgCard} p="$4" borderRadius={16} borderWidth={1} borderColor={COLORS.borderSubtle}>
-        <XStack jc="space-between" ai="center" mb="$2">
-          <Text color={COLORS.textPrimary} fontSize={16} fontWeight="800">
-            📊 Market Insights
-          </Text>
-          <Text color={trendColor} fontSize={13} fontWeight="700">
-            {trendIcon}
-          </Text>
-        </XStack>
-
-        <XStack gap="$4" mt="$2">
-          <YStack f={1}>
-            <Text color={COLORS.textSecondary} fontSize={11} textTransform="uppercase" fontWeight="700">All-Time Low</Text>
-            <Text color={COLORS.priceGreen} fontSize={16} fontWeight="800" mt={2}>₹{stats.all_time_low_price?.toLocaleString('en-IN')}</Text>
-            <Text color={COLORS.textMuted} fontSize={12} mt={2}>{stats.all_time_low_platform}</Text>
-          </YStack>
-
-          <YStack width={1} backgroundColor={COLORS.borderSubtle} />
-
-          <YStack f={1}>
-            <Text color={COLORS.textSecondary} fontSize={11} textTransform="uppercase" fontWeight="700">Average Price</Text>
-            <Text color={COLORS.textPrimary} fontSize={16} fontWeight="800" mt={2}>₹{stats.average_price?.toLocaleString('en-IN')}</Text>
-            <Text color={COLORS.textMuted} fontSize={12} mt={2}>Based on {stats.total_snapshots} scans</Text>
-          </YStack>
-        </XStack>
-      </YStack>
-    </Animated.View>
-  );
-}
-
-// ─── Personalized Dashboard Components ─────────────────
-
-const MOCK_TRENDING_DEALS = [
-  { id: 't1', title: 'Sony WH-1000XM5', price_inr: 24990, original_price_inr: 34990, image_url: 'https://m.media-amazon.com/images/I/51aXvjzcukL._SX522_.jpg', platform: 'amazon' },
-  { id: 't2', title: 'Samsung Galaxy Watch 6', price_inr: 18499, original_price_inr: 29999, image_url: 'https://m.media-amazon.com/images/I/61NhiBSOUwL._SX679_.jpg', platform: 'flipkart' }
-];
-
-const MOCK_FOR_YOU_GRID = [
-  { id: 'g1', title: 'Nike Air Force 1', price_inr: 7495, original_price_inr: 8995, image_url: 'https://static.nike.com/a/images/c_limit,w_592,f_auto/t_product_v1/4f37fca8-6bce-43e7-ad07-f57ae3c13142/air-force-1-07-mens-shoes-jBrhbr.png', platform: 'myntra' },
-  { id: 'g2', title: 'LG 27" Ultragear Monitor', price_inr: 21500, original_price_inr: 32000, image_url: 'https://m.media-amazon.com/images/I/71R3yX9PkwL._SX522_.jpg', platform: 'amazon' },
-  { id: 'g3', title: 'Levi\'s Men 511 Slim Jeans', price_inr: 1499, original_price_inr: 3299, image_url: 'https://m.media-amazon.com/images/I/81B4W1q9m-L._SY741_.jpg', platform: 'flipkart' },
-  { id: 'g4', title: 'Apple AirPods Pro (2nd Gen)', price_inr: 19900, original_price_inr: 24900, image_url: 'https://m.media-amazon.com/images/I/61SUj2aKoEL._SX679_.jpg', platform: 'croma' }
-];
-
-function SavingsGoalCard() {
-  const totalSavings = useCartStore((state) => state.getTotalSavings());
-  const monthlyGoal = 5000;
-  const progressPercent = Math.min((totalSavings / monthlyGoal) * 100, 100);
-
-  const handleShare = async () => {
-    const message = `I just saved ₹${totalSavings.toLocaleString('en-IN')} using SaverHunt! 🚀`;
-    try {
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync('', { dialogTitle: 'Share Savings', UTI: 'public.plain-text' }); // Expo requires a file URI, falling back to basic alert for text sharing on RN if needed, this requires react-native Share for just text.
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  };
-
-  return (
-    <Animated.View entering={FadeInUp.delay(300).duration(500)} style={{ marginBottom: 24 }}>
-      <LinearGradient
-        colors={['#1F2937', '#111827']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ borderRadius: 16, padding: 20, borderWidth: 1, borderColor: COLORS.borderSubtle }}
-      >
-        <XStack jc="space-between" ai="center">
-          <YStack>
-            <Text color={COLORS.textSecondary} fontSize={13} fontWeight="800" textTransform="uppercase" letterSpacing={1}>
-              Your Monthly Savings
-            </Text>
-            <Text color={COLORS.priceGreen} fontSize={32} fontWeight="900" mt="$1">
-              ₹{totalSavings.toLocaleString('en-IN')}
-            </Text>
-          </YStack>
-          <Text fontSize={40}>🏆</Text>
-        </XStack>
-
-        <YStack mt="$4" gap="$2">
-          <XStack jc="space-between">
-            <Text color={COLORS.textSecondary} fontSize={12}>Goal: ₹{monthlyGoal.toLocaleString('en-IN')}</Text>
-            <Text color={COLORS.textSecondary} fontSize={12}>{Math.round(progressPercent)}%</Text>
+    <Animated.View entering={FadeInUp.delay(100).duration(500)} style={{ marginBottom: 16 }}>
+      <View style={st.statsCard}>
+        <LinearGradient colors={['rgba(139,92,246,0.08)', 'rgba(59,130,246,0.04)']} style={StyleSheet.absoluteFill} />
+        <XStack jc="space-between" ai="center" mb={14}>
+          <XStack ai="center" gap={8}>
+            <MaterialCommunityIcons name="chart-box-outline" size={16} color="#A78BFA" />
+            <Text color="#F0F6FC" fontSize={15} fontWeight="800">Market Insights</Text>
           </XStack>
-          <YStack height={8} backgroundColor={COLORS.bgDeep} borderRadius={4} overflow="hidden">
-            <Animated.View style={{ height: '100%', width: `${progressPercent}%`, backgroundColor: COLORS.accentBlue, borderRadius: 4 }} />
+          <XStack ai="center" gap={4} style={st.trendBadge}>
+            <MaterialCommunityIcons name={isDropping ? 'trending-down' : 'trending-up'} size={13} color={trendColor} />
+            <Text color={trendColor} fontSize={11} fontWeight="700">{stats.price_trend}</Text>
+          </XStack>
+        </XStack>
+        <XStack gap={16}>
+          <YStack f={1} style={st.statBlock}>
+            <Text color="rgba(255,255,255,0.3)" fontSize={10} fontWeight="700" textTransform="uppercase" letterSpacing={0.5}>All-Time Low</Text>
+            <Text color="#3FB950" fontSize={20} fontWeight="900" mt={4}>₹{stats.all_time_low_price?.toLocaleString('en-IN')}</Text>
           </YStack>
-        </YStack>
-      </LinearGradient>
+          <View style={st.statDivider} />
+          <YStack f={1} style={st.statBlock}>
+            <Text color="rgba(255,255,255,0.3)" fontSize={10} fontWeight="700" textTransform="uppercase" letterSpacing={0.5}>Average</Text>
+            <Text color="#F0F6FC" fontSize={20} fontWeight="900" mt={4}>₹{stats.average_price?.toLocaleString('en-IN')}</Text>
+          </YStack>
+        </XStack>
+      </View>
     </Animated.View>
   );
 }
 
-function DailyLootDrop() {
-  const [claimed, setClaimed] = useState(false);
-  const scale = useSharedValue(1);
-  const animatedScale = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }]
-  }));
+// ─── Skeleton ───────────────────────────────────────────
+function SkeletonCard({ delay: d = 0 }: { delay?: number }) {
+  const opacity = useSharedValue(0.3);
+  useEffect(() => {
+    opacity.value = withDelay(d, withRepeat(withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) }), -1, true));
+  }, []);
+  const shimmer = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={[{ width: SW * 0.78, marginRight: 16, height: 260, borderRadius: 20 }, shimmer]}>
+      <LinearGradient colors={['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)']} style={{ flex: 1, borderRadius: 20 }} />
+    </Animated.View>
+  );
+}
 
-  const handleClaim = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    scale.value = withTiming(0.95, { duration: 100 }, () => {
-      scale.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.ease) });
-    });
-    setClaimed(true);
-    Alert.alert('🎉 Loot Claimed!', 'You secured 1 of the 10 exclusive Airpods Pro drops! Added to your Secure Vault.');
-  };
+// ─── Quick Stats Row ────────────────────────────────────
+function QuickStats() {
+  const stats = [
+    { value: '6+', label: 'Platforms', icon: 'store', color: '#3B82F6' },
+    { value: 'AI', label: 'Powered', icon: 'brain', color: '#A855F7' },
+    { value: '₹0', label: 'Saved', icon: 'piggy-bank', color: '#3FB950' },
+  ];
 
   return (
-    <Animated.View entering={FadeInUp.delay(350).duration(600)} style={{ marginBottom: 24 }}>
-      <Animated.View style={animatedScale}>
-        <LinearGradient
-          colors={['#450A0A', '#1C0606']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ borderRadius: 20, padding: 2, borderWidth: 1, borderColor: '#DC2626' }}
-        >
-          <YStack backgroundColor="#0c0404" borderRadius={18} p="$4" overflow="hidden">
-            {/* Background Glow */}
-            <YStack position="absolute" top={-50} right={-50} width={150} height={150} backgroundColor="rgba(220, 38, 38, 0.15)" borderRadius={75} style={{ filter: 'blur(40px)' }} />
+    <Animated.View entering={FadeInUp.delay(100).duration(500)}>
+      <XStack gap={10} px={24} mb={6}>
+        {stats.map((s, i) => (
+          <View key={i} style={st.quickStatCard}>
+            <LinearGradient colors={['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.01)']} style={StyleSheet.absoluteFill} />
+            <View style={[st.quickStatIcon, { backgroundColor: s.color + '15' }]}>
+              <MaterialCommunityIcons name={s.icon as any} size={16} color={s.color} />
+            </View>
+            <Text color="#F0F6FC" fontSize={16} fontWeight="900" mt={6}>{s.value}</Text>
+            <Text color="rgba(255,255,255,0.3)" fontSize={10} fontWeight="600">{s.label}</Text>
+          </View>
+        ))}
+      </XStack>
+    </Animated.View>
+  );
+}
 
-            <XStack jc="space-between" ai="center" mb="$3">
-              <XStack ai="center" gap="$2">
-                <Text fontSize={18}>🚨</Text>
-                <Text color="#DC2626" fontSize={14} fontWeight="900" textTransform="uppercase" letterSpacing={1}>Daily Loot Drop</Text>
-              </XStack>
-              <YStack backgroundColor="rgba(220, 38, 38, 0.1)" px="$2" py="$1" borderRadius={6} borderWidth={1} borderColor="rgba(220, 38, 38, 0.3)">
-                <Text color="#DC2626" fontSize={11} fontWeight="800">Ends 04:32:10</Text>
-              </YStack>
-            </XStack>
+// ─── Search Summary Banner ───────────────────────────
+function SearchSummaryBanner({ summary, buySignal, buySignalReason }: {
+  summary: string; buySignal?: string; buySignalReason?: string;
+}) {
+  const signalConfig: Record<string, { color: string; icon: string; label: string }> = {
+    BUY_NOW: { color: '#3FB950', icon: 'cart-check', label: 'Buy Now' },
+    GOOD_DEAL: { color: '#3B82F6', icon: 'thumb-up', label: 'Good Deal' },
+    WAIT: { color: '#D97706', icon: 'clock-outline', label: 'Wait' },
+  };
+  const signal = signalConfig[buySignal || ''] || signalConfig.GOOD_DEAL;
 
-            <XStack ai="center" gap="$4">
-              <YStack width={80} height={80} borderRadius={12} backgroundColor={COLORS.bgCardHover} overflow="hidden">
-                <ExpoImage source={{ uri: 'https://m.media-amazon.com/images/I/61SUj2aKoEL._SX679_.jpg' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-              </YStack>
-              <YStack f={1}>
-                <Text color={COLORS.textPrimary} fontSize={16} fontWeight="800" numberOfLines={1}>Apple AirPods Pro (2nd Gen)</Text>
-                <XStack ai="center" gap="$2" mt="$1">
-                  <Text color={COLORS.priceGreen} fontSize={22} fontWeight="900">₹9,999</Text>
-                  <Text color={COLORS.textSecondary} fontSize={14} textDecorationLine="line-through">₹24,900</Text>
-                </XStack>
+  return (
+    <Animated.View entering={FadeIn.duration(400)}>
+      <View style={st.summaryBanner}>
+        <LinearGradient colors={['rgba(139,92,246,0.08)', 'rgba(59,130,246,0.04)']} style={StyleSheet.absoluteFill} />
+        <XStack ai="center" gap={10} mb={8}>
+          <MaterialCommunityIcons name="auto-fix" size={14} color={COLORS.brandPurpleLight} />
+          <Text color={COLORS.textPrimary} fontSize={13} fontWeight="700" f={1} numberOfLines={2}>
+            {summary}
+          </Text>
+        </XStack>
+        {buySignal && (
+          <XStack ai="center" gap={8}>
+            <View style={[st.buySignalPill, { backgroundColor: signal.color + '18', borderColor: signal.color + '30' }]}>
+              <MaterialCommunityIcons name={signal.icon as any} size={13} color={signal.color} />
+              <Text color={signal.color} fontSize={11} fontWeight="800" ml={5}>{signal.label}</Text>
+            </View>
+            {buySignalReason && (
+              <Text color={COLORS.textTertiary} fontSize={10} f={1} numberOfLines={1}>{buySignalReason}</Text>
+            )}
+          </XStack>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
 
-                <YStack mt="$2" gap="$1">
-                  <XStack jc="space-between">
-                    <Text color={COLORS.textSecondary} fontSize={10} fontWeight="700">8/10 CLAIMED</Text>
-                    <Text color="#DC2626" fontSize={10} fontWeight="900">ALMOST GONE</Text>
-                  </XStack>
-                  <YStack height={6} backgroundColor="rgba(255,255,255,0.1)" borderRadius={3} overflow="hidden">
-                    <YStack height="100%" width="80%" backgroundColor="#DC2626" borderRadius={3} />
-                  </YStack>
-                </YStack>
-              </YStack>
-            </XStack>
+// ─── Buy Signal Badge (inline on result cards) ──────
+function BuySignalBadge({ item, priceStats }: { item: any; priceStats: any }) {
+  const discount = item.original_price_inr
+    ? ((item.original_price_inr - item.price_inr) / item.original_price_inr) * 100
+    : 0;
+  const isNearLow = priceStats?.all_time_low_price
+    ? item.price_inr <= priceStats.all_time_low_price * 1.05
+    : false;
+  const isAboveAvg = priceStats?.average_price
+    ? item.price_inr > priceStats.average_price
+    : false;
 
-            <Button
-              mt="$4"
-              size="$4"
-              backgroundColor={claimed ? COLORS.badgeBg : '#DC2626'}
-              borderRadius={12}
-              onPress={handleClaim}
-              disabled={claimed}
-              pressStyle={{ opacity: 0.8 }}
+  let signal: { label: string; color: string; icon: string } | null = null;
+  if (isNearLow && discount > 10) {
+    signal = { label: 'Buy Now', color: '#3FB950', icon: 'lightning-bolt' };
+  } else if (isAboveAvg) {
+    signal = { label: 'Wait', color: '#D97706', icon: 'clock-outline' };
+  } else if (discount > 15) {
+    signal = { label: 'Good Deal', color: '#3B82F6', icon: 'thumb-up' };
+  }
+
+  if (!signal) return null;
+  return (
+    <View style={[st.buySignalInline, { backgroundColor: signal.color + '12', borderColor: signal.color + '25' }]}>
+      <MaterialCommunityIcons name={signal.icon as any} size={10} color={signal.color} />
+      <Text color={signal.color} fontSize={9} fontWeight="900" ml={3}>{signal.label}</Text>
+    </View>
+  );
+}
+
+// ─── Comparison Card (group same product across platforms) ──
+function ComparisonCard({ group, onPress }: {
+  group: { title: string; items: any[]; bestPrice: number; worstPrice: number };
+  onPress: (item: any) => void;
+}) {
+  const savings = group.worstPrice - group.bestPrice;
+  return (
+    <Animated.View entering={FadeInUp.duration(400)} style={{ marginBottom: 14 }}>
+      <View style={st.comparisonCard}>
+        <LinearGradient colors={['rgba(59,130,246,0.06)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+        <XStack ai="center" gap={8} mb={10}>
+          <MaterialCommunityIcons name="compare-horizontal" size={14} color={COLORS.brandBlue} />
+          <Text color={COLORS.textPrimary} fontSize={14} fontWeight="800" f={1} numberOfLines={1}>
+            {group.title}
+          </Text>
+          {savings > 0 && (
+            <View style={st.compSavingsBadge}>
+              <Text color={COLORS.accentGreen} fontSize={10} fontWeight="800">Save ₹{savings.toLocaleString('en-IN')}</Text>
+            </View>
+          )}
+        </XStack>
+
+        {group.items.map((item, i) => {
+          const isBest = item.price_inr === group.bestPrice;
+          const brand = PLATFORM_BRANDS[item.platform];
+          return (
+            <TouchableOpacity
+              key={`${item.platform}-${i}`}
+              onPress={() => onPress(item)}
+              activeOpacity={0.7}
+              style={[st.compPlatformRow, isBest && st.compBestRow]}
             >
-              <Text color={claimed ? COLORS.priceGreen : "white"} fontWeight="900" fontSize={15} letterSpacing={1}>
-                {claimed ? 'SECURED IN VAULT ✓' : 'CLAIM DROP NOW'}
+              <View style={[st.compPlatformDot, { backgroundColor: brand?.color || '#A78BFA' }]} />
+              <Text color={COLORS.textSecondary} fontSize={12} fontWeight="700" f={1}>{item.platform}</Text>
+              <Text color={isBest ? COLORS.accentGreen : COLORS.textPrimary} fontSize={15} fontWeight="900">
+                ₹{item.price_inr?.toLocaleString('en-IN')}
               </Text>
-            </Button>
-          </YStack>
-        </LinearGradient>
-      </Animated.View>
+              {isBest && (
+                <View style={st.compBestBadge}>
+                  <Text color={COLORS.accentGreen} fontSize={8} fontWeight="900">BEST</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </Animated.View>
   );
 }
 
-function MiniDealCard({ item, index, pushToken }: { item: any; index: number; pushToken: string | null }) {
-  const addItem = useCartStore((state) => state.addItem);
-  const [isAdded, setIsAdded] = useState(false);
+// ─── Recently Viewed Section ─────────────────────────
+function RecentlyViewedSection({ onProductPress }: { onProductPress: (product: RecentProduct) => void }) {
+  const [items, setItems] = useState<RecentProduct[]>([]);
+  useEffect(() => { setItems(getRecentlyViewed()); }, []);
 
-  const handleAdd = () => {
-    addItem(item);
-    setIsAdded(true);
-    setTimeout(() => setIsAdded(false), 2000);
+  if (items.length === 0) return null;
+  return (
+    <YStack mt={20}>
+      <YStack px={24}>
+        <SectionTitle title="Recently Viewed" subtitle="Products you checked" icon="history" delay={50} />
+      </YStack>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}>
+        {items.slice(0, 10).map((item, i) => (
+          <Animated.View key={item.slug} entering={FadeInUp.delay(i * 60).duration(400)}>
+            <TouchableOpacity onPress={() => onProductPress(item)} activeOpacity={0.8} style={st.recentCard}>
+              <View style={st.recentImageWrap}>
+                {item.image_url ? (
+                  <ExpoImage source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
+                ) : (
+                  <MaterialCommunityIcons name="image-off-outline" size={20} color="rgba(255,255,255,0.1)" />
+                )}
+              </View>
+              <YStack p={10} gap={2}>
+                <Text color="rgba(255,255,255,0.4)" fontSize={9} fontWeight="700" textTransform="uppercase">{item.platform || ''}</Text>
+                <Text color={COLORS.textPrimary} fontSize={12} fontWeight="700" numberOfLines={1}>{item.title}</Text>
+                <Text color={COLORS.accentGreen} fontSize={14} fontWeight="900">₹{item.price_inr?.toLocaleString('en-IN')}</Text>
+              </YStack>
+            </TouchableOpacity>
+          </Animated.View>
+        ))}
+      </ScrollView>
+    </YStack>
+  );
+}
+
+// ─── Personalized "Because You Searched" Section ─────
+function PersonalizedSection({ onSearchPress }: { onSearchPress: (query: string) => void }) {
+  const topCategories = useMemo(() => getTopSearchCategories(2), []);
+  const recentQueries = useMemo(() => getRecentSearchQueries(4), []);
+
+  if (topCategories.length === 0 && recentQueries.length === 0) return null;
+
+  const categoryLabel: Record<string, string> = {
+    electronics: 'Electronics', fashion: 'Fashion', home: 'Home & Living',
+    beauty: 'Beauty', sports: 'Sports & Fitness', books: 'Books',
   };
 
   return (
-    <Animated.View entering={FadeInUp.delay(index * 100).duration(400)} style={{ width: 140, marginRight: 16 }}>
-      <YStack backgroundColor={COLORS.bgCard} borderRadius={12} borderWidth={1} borderColor={COLORS.borderSubtle} overflow="hidden">
-        <ExpoImage source={{ uri: item.image_url }} style={{ width: '100%', height: 120 }} contentFit="cover" />
-        <YStack p="$2" gap="$1">
-          <Text color={COLORS.badgeRed} fontSize={10} fontWeight="900">🔥 ₹{(item.original_price_inr - item.price_inr).toLocaleString()} OFF</Text>
-          <Text color={COLORS.textPrimary} fontSize={12} fontWeight="600" numberOfLines={1}>{item.title}</Text>
-          <Text color={COLORS.priceGreen} fontSize={14} fontWeight="800">₹{item.price_inr.toLocaleString()}</Text>
+    <YStack px={24} mt={20}>
+      {recentQueries.length > 0 && (
+        <Animated.View entering={FadeInUp.delay(100).duration(500)}>
+          <XStack ai="center" gap={8} mb={12}>
+            <View style={st.sectionIcon}>
+              <LinearGradient colors={['rgba(236,72,153,0.15)', 'rgba(219,39,119,0.08)']} style={StyleSheet.absoluteFill} />
+              <MaterialCommunityIcons name="account-heart-outline" size={16} color="#EC4899" />
+            </View>
+            <Text color={COLORS.textPrimary} fontSize={16} fontWeight="900">For You</Text>
+          </XStack>
+          <XStack flexWrap="wrap" gap={8} mb={16}>
+            {recentQueries.map((q, i) => (
+              <TouchableOpacity key={i} onPress={() => onSearchPress(q)} style={st.personalizedChip} activeOpacity={0.7}>
+                <MaterialCommunityIcons name="magnify" size={13} color="rgba(255,255,255,0.4)" />
+                <Text color="rgba(255,255,255,0.5)" fontSize={12} fontWeight="600" ml={5}>{q}</Text>
+                <MaterialCommunityIcons name="arrow-top-right" size={11} color="rgba(255,255,255,0.2)" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            ))}
+          </XStack>
+        </Animated.View>
+      )}
 
-          <Button size="$2" mt="$2" backgroundColor={isAdded ? COLORS.badgeBg : COLORS.accentBlue} onPress={handleAdd} disabled={isAdded}>
-            <Text color="white" fontSize={11} fontWeight="700">{isAdded ? 'Added ✓' : 'Add to Cart'}</Text>
-          </Button>
-        </YStack>
+      {topCategories.length > 0 && (
+        <Animated.View entering={FadeInUp.delay(200).duration(500)}>
+          <XStack ai="center" gap={6} mb={10}>
+            <MaterialCommunityIcons name="trending-up" size={14} color={COLORS.accentOrange} />
+            <Text color={COLORS.textTertiary} fontSize={11} fontWeight="800" textTransform="uppercase">
+              Your top categories
+            </Text>
+          </XStack>
+          <XStack gap={10}>
+            {topCategories.map((cat) => {
+              const catDef = CATEGORIES.find(c => c.label.toLowerCase() === cat);
+              if (!catDef) return null;
+              return (
+                <TouchableOpacity key={cat} onPress={() => onSearchPress(catDef.label)} style={st.topCatChip} activeOpacity={0.7}>
+                  <LinearGradient colors={[catDef.gradient[0] + '20', catDef.gradient[1] + '10']} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name={catDef.icon as any} size={16} color={catDef.gradient[0]} />
+                  <Text color={COLORS.textSecondary} fontSize={12} fontWeight="700" ml={8}>
+                    {categoryLabel[cat] || catDef.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </XStack>
+        </Animated.View>
+      )}
+    </YStack>
+  );
+}
+
+// ─── Product Suggestion Card (for vague queries) ─────
+function ProductSuggestionCard({ item, index, onPress }: { item: any; index: number; onPress: () => void }) {
+  return (
+    <Animated.View entering={FadeInUp.delay(100 + index * 60).duration(400)}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={st.suggCard}>
+        <LinearGradient colors={['rgba(139,92,246,0.06)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+        <XStack ai="center" gap={14} f={1}>
+          <View style={st.suggIcon}>
+            <MaterialCommunityIcons name="magnify" size={18} color="#A78BFA" />
+          </View>
+          <YStack f={1}>
+            <Text color="#F0F6FC" fontSize={14} fontWeight="700" numberOfLines={1}>{item.title}</Text>
+            <Text color="rgba(255,255,255,0.3)" fontSize={12} mt={2}>~₹{item.approx_price?.toLocaleString('en-IN')}</Text>
+          </YStack>
+          {item.tag && (
+            <View style={st.suggTag}>
+              <Text color="#A78BFA" fontSize={10} fontWeight="800">{item.tag}</Text>
+            </View>
+          )}
+          <MaterialCommunityIcons name="arrow-right" size={16} color="rgba(255,255,255,0.2)" />
+        </XStack>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Sort & Filter Bar ───────────────────────────────
+const SORT_OPTIONS = [
+  { id: 'relevance', label: 'Relevance', icon: 'sort' },
+  { id: 'price_asc', label: 'Price ↑', icon: 'sort-ascending' },
+  { id: 'price_desc', label: 'Price ↓', icon: 'sort-descending' },
+  { id: 'discount', label: 'Discount', icon: 'percent' },
+  { id: 'rating', label: 'Rating', icon: 'star' },
+];
+
+function FilterSortBar({
+  activeSort, onSortChange,
+  activePlatforms, onPlatformToggle,
+  activePriceRange, onPriceRangeChange,
+  priceRangeChips, platforms,
+}: {
+  activeSort: string;
+  onSortChange: (id: string) => void;
+  activePlatforms: string[];
+  onPlatformToggle: (p: string) => void;
+  activePriceRange: any;
+  onPriceRangeChange: (r: any) => void;
+  priceRangeChips: any[];
+  platforms: string[];
+}) {
+  return (
+    <Animated.View entering={FadeIn.duration(300)}>
+      <YStack gap={10} mb={16}>
+        {/* Sort chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+          {SORT_OPTIONS.map(opt => {
+            const isActive = activeSort === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                onPress={() => { Haptics.selectionAsync(); onSortChange(opt.id); }}
+                style={[st.filterChip, isActive && st.filterChipActive]}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name={opt.icon as any} size={13} color={isActive ? '#FFF' : 'rgba(255,255,255,0.4)'} />
+                <Text color={isActive ? '#FFF' : 'rgba(255,255,255,0.5)'} fontSize={12} fontWeight={isActive ? '800' : '600'} ml={5}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Platform filters */}
+        {platforms.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+            <TouchableOpacity
+              onPress={() => { Haptics.selectionAsync(); onPlatformToggle('ALL'); }}
+              style={[st.filterChip, activePlatforms.length === 0 && st.filterChipActive]}
+              activeOpacity={0.7}
+            >
+              <Text color={activePlatforms.length === 0 ? '#FFF' : 'rgba(255,255,255,0.5)'} fontSize={12} fontWeight={activePlatforms.length === 0 ? '800' : '600'}>All</Text>
+            </TouchableOpacity>
+            {platforms.map(p => {
+              const isActive = activePlatforms.includes(p);
+              const brand = PLATFORM_BRANDS[p];
+              return (
+                <TouchableOpacity
+                  key={p}
+                  onPress={() => { Haptics.selectionAsync(); onPlatformToggle(p); }}
+                  style={[st.filterChip, isActive && { backgroundColor: (brand?.color || '#8B5CF6') + '25', borderColor: (brand?.color || '#8B5CF6') + '40' }]}
+                  activeOpacity={0.7}
+                >
+                  <View style={[st.platformFilterDot, { backgroundColor: brand?.color || '#A78BFA' }]} />
+                  <Text color={isActive ? (brand?.color || '#FFF') : 'rgba(255,255,255,0.5)'} fontSize={12} fontWeight={isActive ? '800' : '600'} ml={5}>
+                    {p}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Price range chips */}
+        {priceRangeChips.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+            {priceRangeChips.map(chip => {
+              const isActive = activePriceRange?.label === chip.label;
+              return (
+                <TouchableOpacity
+                  key={chip.label}
+                  onPress={() => { Haptics.selectionAsync(); onPriceRangeChange(isActive ? null : chip); }}
+                  style={[st.filterChip, isActive && { backgroundColor: 'rgba(63,185,80,0.2)', borderColor: 'rgba(63,185,80,0.3)' }]}
+                  activeOpacity={0.7}
+                >
+                  <Text color={isActive ? '#3FB950' : 'rgba(255,255,255,0.5)'} fontSize={12} fontWeight={isActive ? '800' : '600'}>
+                    {chip.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </YStack>
     </Animated.View>
   );
 }
 
-// ─── Showroom Card (3D Carousel) ────────────────────────
-function ShowroomCard({ item, index }: { item: any; index: number }) {
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [arOpen, setArOpen] = useState(false);
-  const [liveViewers] = useState(Math.floor(Math.random() * 100) + 20);
-
-  return (
-    <>
-      <Animated.View
-        entering={FadeInUp.delay(index * 100).duration(400).springify()}
-        style={{
-          width: SCREEN_WIDTH * 0.78,
-          marginRight: 16,
-          borderRadius: 24,
-          backgroundColor: COLORS.bgCard,
-          borderWidth: 1,
-          borderColor: COLORS.borderSubtle,
-          overflow: 'hidden',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: 0.5,
-          shadowRadius: 24,
-          elevation: 12,
-        }}
-      >
-        {/* Large Product Image */}
-        <YStack
-          height={280}
-          onPress={() => setViewerOpen(true)}
-          pressStyle={{ opacity: 0.9 }}
-        >
-          {item.image_url ? (
-            <ExpoImage
-              source={{ uri: item.image_url }}
-              style={{ width: '100%', height: '100%' }}
-              contentFit="cover"
-              transition={400}
-            />
-          ) : (
-            <YStack f={1} ai="center" jc="center" backgroundColor={COLORS.bgCardHover}>
-              <Text color={COLORS.textMuted} fontSize={16}>📷 No Image</Text>
-            </YStack>
-          )}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.85)']}
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%' }}
-          />
-          {/* Quick View label */}
-          <YStack position="absolute" top={12} right={12}>
-            <YStack backgroundColor="rgba(0,0,0,0.6)" px="$2" py="$1" borderRadius={8}>
-              <Text color="white" fontSize={10} fontWeight="800">🔍 360°</Text>
-            </YStack>
-          </YStack>
-          {/* Platform badge */}
-          {item.platform && (
-            <YStack position="absolute" bottom={12} left={12}>
-              <YStack backgroundColor="rgba(0,0,0,0.6)" px="$2" py="$1" borderRadius={6}>
-                <Text color={COLORS.accentBlue} fontSize={10} fontWeight="800" textTransform="uppercase">
-                  {item.platform}
-                </Text>
-              </YStack>
-            </YStack>
-          )}
-        </YStack>
-
-        {/* Info */}
-        <YStack p="$4" gap="$2">
-          <Text color={COLORS.textPrimary} fontSize={18} fontWeight="900" numberOfLines={2} lineHeight={22} letterSpacing={-0.3}>
-            {item.title || 'Untitled Product'}
-          </Text>
-          <XStack ai="center" gap="$3">
-            <Text color={COLORS.priceGreen} fontSize={24} fontWeight="900" letterSpacing={-1}>
-              ₹{item.price_inr?.toLocaleString('en-IN') || 'N/A'}
-            </Text>
-            {item.is_fake_sale && (
-              <YStack backgroundColor="rgba(220, 38, 38, 0.15)" px="$2" py="$1" borderRadius={8} borderWidth={1} borderColor="#DC2626">
-                <Text color="#DC2626" fontSize={10} fontWeight="900">🚨 FAKE SALE</Text>
-              </YStack>
-            )}
-            {!item.is_fake_sale && (
-              <XStack ai="center" gap="$1" backgroundColor="rgba(220, 38, 38, 0.1)" px="$2" py="$1" borderRadius={6}>
-                <YStack width={6} height={6} borderRadius={3} backgroundColor={COLORS.badgeRed} />
-                <Text color={COLORS.badgeRed} fontSize={10} fontWeight="900">👀 {liveViewers} HOT</Text>
-              </XStack>
-            )}
-          </XStack>
-          <XStack gap="$2" mt="$2">
-            <Button f={1} size="$3" backgroundColor="#A78BFA" borderRadius={12} onPress={() => setViewerOpen(true)} pressStyle={{ scale: 0.96 }}>
-              <Text color="#000" fontWeight="900" fontSize={13}>🔍 360° View</Text>
-            </Button>
-            <Button size="$3" backgroundColor={COLORS.bgCardHover} borderRadius={12} onPress={() => setArOpen(true)} pressStyle={{ scale: 0.96 }}>
-              <Text fontSize={16}>👁️</Text>
-            </Button>
-          </XStack>
-        </YStack>
-      </Animated.View>
-
-      <ProductViewer360
-        visible={viewerOpen}
-        onClose={() => setViewerOpen(false)}
-        images={item.image_url ? [item.image_url] : []}
-        title={item.title || 'Product'}
-        price={item.price_inr}
-        platform={item.platform}
-        url={item.product_url}
-        onARPress={() => { setViewerOpen(false); setTimeout(() => setArOpen(true), 300); }}
-      />
-      <ARTryOnModal
-        visible={arOpen}
-        onClose={() => setArOpen(false)}
-        imageUrl={item.image_url}
-        productTitle={item.title}
-      />
-    </>
-  );
-}
-
-// ─── Main Screen ───────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ─── MAIN SCREEN ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 export default function SearchScreen() {
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [isLoadingTask, setIsLoadingTask] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -1044,429 +949,959 @@ export default function SearchScreen() {
   const [priceStats, setPriceStats] = useState<any>(null);
   const { expoPushToken } = usePushNotifications();
   const [isScannerVisible, setIsScannerVisible] = useState(false);
-  const [barcodeSearchResult, setBarcodeSearchResult] = useState<any>(null);
-  const [isShowroomMode, setIsShowroomMode] = useState(false);
+  const [isVisualSearchVisible, setIsVisualSearchVisible] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const params = useLocalSearchParams();
 
-  // Deal Feeds State (Instantly load from MMKV cache if available)
+  // Smart search state
+  const [smartData, setSmartData] = useState<any>(null);
+  const [productSuggestions, setProductSuggestions] = useState<any[]>([]);
+  const [isSmartLoading, setIsSmartLoading] = useState(false);
+  // Filter & sort state
+  const [activeSort, setActiveSort] = useState('relevance');
+  const [activePlatforms, setActivePlatforms] = useState<string[]>([]);
+  const [activePriceRange, setActivePriceRange] = useState<any>(null);
+  const [allResults, setAllResults] = useState<any[]>([]); // unfiltered results
+
+  // New feature state
+  const [resultsSummary, setResultsSummary] = useState<{ summary: string; buySignal?: string; buySignalReason?: string } | null>(null);
+  const [quickActionsItem, setQuickActionsItem] = useState<any>(null);
+  const [shareItem, setShareItem] = useState<any>(null);
+
   const [trendingDeals, setTrendingDeals] = useState<any[]>(() => {
     const cached = storage.getString('cachedTrendingDeals');
-    return cached ? JSON.parse(cached) : MOCK_TRENDING_DEALS;
+    return cached ? JSON.parse(cached) : [];
   });
   const [forYouDeals, setForYouDeals] = useState<any[]>(() => {
     const cached = storage.getString('cachedForYouDeals');
-    return cached ? JSON.parse(cached) : MOCK_FOR_YOU_GRID;
+    return cached ? JSON.parse(cached) : [];
   });
-
-  // If we already have cached deals, no need to show the full screen loading skeleton spinner initially
   const [isLoadingDeals, setIsLoadingDeals] = useState(!storage.getString('cachedTrendingDeals'));
 
-  // Handle Shared Queries from Deep Links
+  // Search bar glow animation
+  const searchGlow = useSharedValue(0);
+  useEffect(() => {
+    searchGlow.value = searchFocused
+      ? withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) })
+      : withTiming(0, { duration: 300 });
+  }, [searchFocused]);
+  const searchGlowStyle = useAnimatedStyle(() => ({
+    borderColor: `rgba(139,92,246,${0.06 + searchGlow.value * 0.35})`,
+    shadowOpacity: searchGlow.value * 0.4,
+    shadowRadius: searchGlow.value * 20,
+  }));
+
+  // Header parallax
+  const headerOpacity = useSharedValue(1);
+
   useEffect(() => {
     if (params.sharedQuery && typeof params.sharedQuery === 'string') {
-      setQuery(params.sharedQuery);
-      // Clear param to prevent infinite loop on re-renders, but trigger search
-      handleSearch(params.sharedQuery);
+      setQuery(params.sharedQuery); handleSearch(params.sharedQuery);
     }
   }, [params.sharedQuery]);
 
-  // Fetch Live Deals on Mount
   useEffect(() => {
-    async function fetchLiveDeals() {
+    (async () => {
       try {
-        const [trendingRes, forYouRes] = await Promise.all([
-          fetch(`${FASTAPI_URL}/api/v1/deals/trending`),
-          fetch(`${FASTAPI_URL}/api/v1/deals/foryou`)
-        ]);
-
-        if (trendingRes.ok) {
-          const trendingData = await trendingRes.json();
-          if (trendingData.status === 'success' && trendingData.data.length > 0) {
-            setTrendingDeals(trendingData.data);
-            storage.set('cachedTrendingDeals', JSON.stringify(trendingData.data));
-          }
-        }
-
-        if (forYouRes.ok) {
-          const forYouData = await forYouRes.json();
-          if (forYouData.status === 'success' && forYouData.data.length > 0) {
-            setForYouDeals(forYouData.data);
-            storage.set('cachedForYouDeals', JSON.stringify(forYouData.data));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching live deals:', error);
-      } finally {
-        setIsLoadingDeals(false);
-      }
-    }
-
-    fetchLiveDeals();
+        const [tR, fR] = await Promise.all([api.trendingDeals(), api.forYouDeals()]);
+        if (tR.status === 'success' && tR.data?.length > 0) { setTrendingDeals(tR.data); storage.set('cachedTrendingDeals', JSON.stringify(tR.data)); }
+        if (fR.status === 'success' && fR.data?.length > 0) { setForYouDeals(fR.data); storage.set('cachedForYouDeals', JSON.stringify(fR.data)); }
+      } catch (e) { /* backend down */ } finally { setIsLoadingDeals(false); }
+    })();
   }, []);
 
-  // Poll the results endpoint until the Celery task completes
   useEffect(() => {
     if (!activeTaskId || !isLoadingTask) return;
-
-    console.log(`Polling for task_id: ${activeTaskId}`);
-
-    const intervalId = setInterval(async () => {
-      try {
-        const response = await fetch(`${FASTAPI_URL}/api/v1/results/${activeTaskId}`);
-        const data = await response.json();
-
-        if (data.status === 'success' && data.data) {
-          console.log('Task complete! Results:', data.data);
-          const resultData = data.data;
-
-          if (resultData.error || !resultData.products || resultData.products.length === 0) {
-            Alert.alert('Search Failed', resultData.error || 'No products found.');
-            setSearchResults([]);
-            setPriceStats(null);
-          } else {
-            setSearchResults(resultData.products);
-            setPriceStats(resultData.price_stats || null);
-          }
-
-          setIsLoadingTask(false);
-          setActiveTaskId(null);
-        } else if (data.status === 'failed') {
-          Alert.alert('Search Failed', data.error || 'Task failed.');
-          setIsLoadingTask(false);
-          setActiveTaskId(null);
-        }
-        // If status is 'pending', keep polling
-      } catch (err) {
-        console.error('Polling error', err);
+    const startTime = Date.now();
+    const id = setInterval(async () => {
+      // Stop polling after 30 seconds
+      if (Date.now() - startTime > 30000) {
+        setIsLoadingTask(false); setActiveTaskId(null); setIsSmartLoading(false);
+        Alert.alert('Timeout', 'Search took too long. Please try again.');
+        return;
       }
+      try {
+        const res = await api.pollResults(activeTaskId);
+        if (res.status === 'success' && res.data) {
+          if (!res.data.products?.length) { Alert.alert('No Results', 'No products found.'); setSearchResults([]); setAllResults([]); }
+          else { setAllResults(res.data.products); setSearchResults(res.data.products); setPriceStats(res.data.price_stats || null); }
+          setIsLoadingTask(false); setActiveTaskId(null); setIsSmartLoading(false);
+        } else if (res.data?.status === 'failed') { Alert.alert('Failed', res.data.error || 'Error.'); setIsLoadingTask(false); setActiveTaskId(null); }
+      } catch (e) { /* poll error */ }
     }, 3000);
-
-    return () => clearInterval(intervalId);
+    return () => clearInterval(id);
   }, [activeTaskId, isLoadingTask]);
 
+  // Smart search: run query understanding + actual search in parallel
   const handleSearch = useCallback(async (overrideQuery?: string) => {
-    const searchQuery = overrideQuery || query;
-    if (!searchQuery.trim()) return;
+    const q = (overrideQuery || query).trim();
+    if (!q) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSearchFocused(false);
+    setIsLoadingTask(true); setSearchResults([]); setAllResults([]); setPriceStats(null); setActiveTaskId(null);
+    setProductSuggestions([]); setSmartData(null); setIsSmartLoading(true);
+    setActiveSort('relevance'); setActivePlatforms([]); setActivePriceRange(null);
+    setResultsSummary(null);
+    addRecentSearch(q);
 
-    setIsLoadingTask(true);
-    setSearchResults([]);
-    setPriceStats(null);
-    setActiveTaskId(null); // Reset active task ID
+    const isBarcode = /^\d+(-\d+)*$/.test(q);
 
-    const isBarcode = /^\d+(-\d+)*$/.test(searchQuery.trim());
-    let endpoint = isBarcode ? `${FASTAPI_URL}/api/v1/scan/${searchQuery.trim()}` : `${FASTAPI_URL}/api/v1/search`;
-    let method = isBarcode ? 'GET' : 'POST';
-    let body = isBarcode ? undefined : JSON.stringify({ query: searchQuery });
+    // Fire smart search + product search in parallel
+    const smartPromise = !isBarcode
+      ? api.smartSearch(q).catch(() => null)
+      : Promise.resolve(null);
+
+    const searchPromise = (isBarcode ? api.scanBarcode(q) : api.search(q)).catch(() => null);
 
     try {
-      const response = await fetch(endpoint, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: body,
-      });
+      const [smartRes, searchRes] = await Promise.all([smartPromise, searchPromise]);
 
-      const data = await response.json();
-
-      // Cache hit or direct scan result — 200 OK
-      if (response.status === 200) {
-        console.log('Cache hit or direct scan! Received data:', data);
-        if (data.error || !data.products || data.products.length === 0) {
-          Alert.alert('Search Failed', data.error || 'No products found.');
-          setSearchResults([]);
-          setPriceStats(null);
-        } else {
-          setSearchResults(data.products);
-          setPriceStats(data.price_stats || null);
+      // Process smart search results
+      if (smartRes?.status === 'success' && smartRes.data) {
+        const sd = smartRes.data;
+        setSmartData(sd);
+        addSearchEntry(q, sd.category);
+        if (sd.is_vague && sd.product_suggestions?.length > 0) {
+          setProductSuggestions(sd.product_suggestions);
+          setIsSmartLoading(false);
+          setIsLoadingTask(false);
+          return; // Show suggestions instead of raw results for vague queries
         }
-        setIsLoadingTask(false);
-        return;
+      } else {
+        addSearchEntry(q);
       }
 
-      // 202 Accepted — start polling via task_id
-      if (response.status === 202 && data.task_id) {
-        console.log('Started search, task_id:', data.task_id);
-        setActiveTaskId(data.task_id);
-        return;
-      }
+      // Process search results
+      if (searchRes) {
+        if (searchRes.task_id) {
+          // Async task queued (202) — poll for results
+          setActiveTaskId(searchRes.task_id);
+        } else if (searchRes.status === 'success' && searchRes.data) {
+          if (!searchRes.data.products?.length) {
+            Alert.alert('No Results', 'No products found.');
+          } else {
+            const products = searchRes.data.products;
+            setAllResults(products);
+            setSearchResults(products);
+            setPriceStats(searchRes.data.price_stats || null);
 
-      // Unexpected status
-      throw new Error(`Unexpected status: ${response.status}`);
-    } catch (error) {
-      console.error('Error initiating search:', error);
-      Alert.alert('Error', 'Failed to start search. Backend might be down.');
-      setIsLoadingTask(false);
-    }
+            // Fetch AI results summary in background
+            const platforms = [...new Set(products.map((p: any) => p.platform).filter(Boolean))] as string[];
+            const prices = products.map((p: any) => p.price_inr || 0).filter((p: number) => p > 0);
+            if (prices.length > 0 && platforms.length > 0) {
+              const minPrice = Math.min(...prices);
+              const bestItem = products.find((p: any) => p.price_inr === minPrice);
+              api.resultsSummary({
+                query: q,
+                results_count: products.length,
+                platforms,
+                min_price: minPrice,
+                max_price: Math.max(...prices),
+                best_platform: bestItem?.platform || platforms[0],
+                category: smartRes?.data?.category,
+              }).then(res => {
+                if (res.status === 'success' && res.data) {
+                  setResultsSummary(res.data);
+                }
+              }).catch(() => {});
+            }
+          }
+          setIsLoadingTask(false);
+        } else {
+          throw new Error(searchRes.error || 'Search failed');
+        }
+      } else {
+        throw new Error('No response');
+      }
+    } catch (e) { Alert.alert('Error', 'Backend might be down.'); setIsLoadingTask(false); }
+    setIsSmartLoading(false);
   }, [query]);
 
+  // Client-side filtering and sorting
+  useEffect(() => {
+    if (allResults.length === 0) { setSearchResults([]); return; }
+
+    let filtered = [...allResults];
+
+    // Platform filter
+    if (activePlatforms.length > 0) {
+      filtered = filtered.filter(item =>
+        activePlatforms.some(p => (item.platform || '').toLowerCase() === p.toLowerCase())
+      );
+    }
+
+    // Price range filter
+    if (activePriceRange) {
+      filtered = filtered.filter(item => {
+        const price = item.price_inr || 0;
+        return price >= activePriceRange.min && price <= activePriceRange.max;
+      });
+    }
+
+    // Sort
+    if (activeSort === 'price_asc') {
+      filtered.sort((a, b) => (a.price_inr || 0) - (b.price_inr || 0));
+    } else if (activeSort === 'price_desc') {
+      filtered.sort((a, b) => (b.price_inr || 0) - (a.price_inr || 0));
+    } else if (activeSort === 'discount') {
+      filtered.sort((a, b) => {
+        const dA = a.original_price_inr ? ((a.original_price_inr - a.price_inr) / a.original_price_inr) : 0;
+        const dB = b.original_price_inr ? ((b.original_price_inr - b.price_inr) / b.original_price_inr) : 0;
+        return dB - dA;
+      });
+    } else if (activeSort === 'rating') {
+      filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+
+    setSearchResults(filtered);
+  }, [allResults, activeSort, activePlatforms, activePriceRange]);
+
+  // Extract unique platforms from results for filter pills
+  const resultPlatforms = React.useMemo(() => {
+    const platforms = new Set<string>();
+    allResults.forEach(item => { if (item.platform) platforms.add(item.platform); });
+    return Array.from(platforms);
+  }, [allResults]);
+
+  const handlePlatformToggle = useCallback((p: string) => {
+    if (p === 'ALL') { setActivePlatforms([]); return; }
+    setActivePlatforms(prev =>
+      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+    );
+  }, []);
+
+  const handleSuggestionTap = useCallback((suggestion: any) => {
+    const q = suggestion.title || suggestion;
+    setQuery(q);
+    setProductSuggestions([]);
+    handleSearch(q);
+  }, [handleSearch]);
+
+  // Visual search handler
+  const handleVisualSearchResult = useCallback((searchQuery: string, _data: any) => {
+    setQuery(searchQuery);
+    setIsVisualSearchVisible(false);
+    handleSearch(searchQuery);
+  }, [handleSearch]);
+
+  // Group results by normalized title for comparison cards
+  const comparisonGroups = useMemo(() => {
+    if (searchResults.length < 3) return [];
+    const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const groups: Record<string, any[]> = {};
+    for (const item of searchResults) {
+      const key = normalize(item.title || '');
+      if (!key) continue;
+      // Find existing group with similar enough key
+      let matched = false;
+      for (const gKey of Object.keys(groups)) {
+        if (key.startsWith(gKey.slice(0, 25)) || gKey.startsWith(key.slice(0, 25))) {
+          groups[gKey].push(item);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) groups[key] = [item];
+    }
+    return Object.entries(groups)
+      .filter(([, items]) => items.length >= 2)
+      .map(([, items]) => {
+        const prices = items.map(i => i.price_inr || 0).filter(p => p > 0);
+        return {
+          title: items[0].title || 'Product',
+          items: items.sort((a, b) => (a.price_inr || 0) - (b.price_inr || 0)),
+          bestPrice: Math.min(...prices),
+          worstPrice: Math.max(...prices),
+        };
+      })
+      .slice(0, 3); // Max 3 comparison groups
+  }, [searchResults]);
+
+  // Quick actions for long-press
+  const quickActions = useMemo(() => {
+    if (!quickActionsItem) return [];
+    return [
+      { id: 'alert', label: 'Price Alert', icon: 'bell-ring-outline', color: '#D97706', onPress: () => {
+        if (!expoPushToken) { Alert.alert('Push Required', 'Enable notifications for price alerts.'); return; }
+        api.createAlert(quickActionsItem.title, quickActionsItem.price_inr, expoPushToken).catch(() => {});
+        Alert.alert('Alert Set', 'You\'ll be notified when the price drops.');
+      }},
+      { id: 'cart', label: 'Add to Cart', icon: 'cart-plus', color: '#3B82F6', onPress: () => {
+        useCartStore.getState().addItem(quickActionsItem);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }},
+      { id: 'share', label: 'Share', icon: 'share-variant', color: '#8B5CF6', onPress: () => {
+        Share.share({
+          message: `Check out ${quickActionsItem.title} for ₹${quickActionsItem.price_inr?.toLocaleString('en-IN')} on ${quickActionsItem.platform}! Found on SaverHunt`,
+        }).catch(() => {});
+      }},
+      { id: 'group', label: 'Group Buy', icon: 'account-group', color: '#EC4899', onPress: () => {
+        // Will be handled by GroupDealSheet
+      }},
+    ];
+  }, [quickActionsItem, expoPushToken]);
+
+  // Track recently viewed on product tap
+  const handleProductTap = useCallback((item: any) => {
+    const slug = (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80);
+    addRecentlyViewed({
+      title: item.title || '',
+      price_inr: item.price_inr || 0,
+      original_price_inr: item.original_price_inr,
+      image_url: item.image_url,
+      platform: item.platform,
+      slug,
+    });
+  }, []);
+
   const hasResults = searchResults.length > 0;
+  const hasSuggestions = productSuggestions.length > 0;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: COLORS.bgDeep }}
-      contentContainerStyle={{ flexGrow: 1 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* ── Gradient Header ────────────────────────────── */}
-      <LinearGradient
-        colors={[COLORS.gradientStart, COLORS.gradientMid, COLORS.bgDeep]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.headerGradient}
+    <View style={{ flex: 1, backgroundColor: '#030711' }}>
+      {/* Animated aurora background */}
+      <AnimatedBackground />
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInUp.duration(600)} style={styles.headerContent}>
-          <Text
-            color={COLORS.textPrimary}
-            fontSize={38}
-            fontWeight="900"
-            ta="center"
-            letterSpacing={-1}
-          >
-            SaverHunt
-          </Text>
-          <Text
-            color={COLORS.textSecondary}
-            fontSize={16}
-            fontWeight="400"
-            ta="center"
-            mt="$1"
-          >
-            Smart Shopping, Smarter Savings.
-          </Text>
-        </Animated.View>
-      </LinearGradient>
+        {/* ── Header ── */}
+        <View style={{ paddingTop: insets.top + 8 }}>
+          <Animated.View entering={FadeInDown.duration(700)}>
+            {/* Top bar: Logo + Scan */}
+            <XStack px={24} ai="center" jc="space-between" mb={16}>
+              <XStack ai="center" gap={8}>
+                <View style={st.logoDot}>
+                  <LinearGradient colors={['#8B5CF6', '#3B82F6']} style={StyleSheet.absoluteFill} />
+                </View>
+                <Text color="rgba(255,255,255,0.5)" fontSize={12} fontWeight="800" letterSpacing={1.5}>SAVERHUNT</Text>
+              </XStack>
 
-      {/* ── Search Bar ─────────────────────────────────── */}
-      <YStack px="$4" mt={-20}>
-        <Animated.View entering={FadeInUp.delay(200).duration(500)}>
-          <XStack
-            backgroundColor={COLORS.bgInput}
-            borderWidth={1}
-            borderColor={COLORS.borderInput}
-            borderRadius={16}
-            ai="center"
-            px="$3"
-            gap="$2"
-          >
-            <Text color={COLORS.textMuted} fontSize={18}>🔍</Text>
-            <Input
-              f={1}
-              size="$5"
-              placeholder="Paste URL, scan barcode, or type..."
-              placeholderTextColor={COLORS.textMuted as any}
-              value={query}
-              onChangeText={setQuery}
-              onSubmitEditing={() => handleSearch()}
-              returnKeyType="search"
-              backgroundColor="transparent"
-              borderWidth={0}
-              color={COLORS.textPrimary}
-              fontSize={15}
-            />
-            <Button
-              size="$3"
-              backgroundColor="transparent"
-              onPress={() => setIsScannerVisible(true)}
-              icon={<Text fontSize={18}>📷</Text>}
-            />
-            <Button
-              size="$3"
-              backgroundColor={COLORS.accentBlue}
-              borderRadius={12}
-              onPress={() => handleSearch()}
-              disabled={isLoadingTask}
-              pressStyle={{ opacity: 0.8 }}
-            >
-              {isLoadingTask ? (
-                <Spinner size="small" color="white" />
-              ) : (
-                <Text color="white" fontWeight="700" fontSize={13}>
-                  Search
-                </Text>
-              )}
-            </Button>
-          </XStack>
-        </Animated.View>
-      </YStack>
-
-      {/* ── Results Section ────────────────────────────── */}
-      <YStack px="$4" mt="$5" pb="$6">
-
-        {/* Section Header */}
-        {(isLoadingTask || hasResults) && (
-          <Animated.View entering={FadeInUp.delay(300).duration(400)}>
-            <XStack jc="space-between" ai="center" mb="$3">
-              <Text
-                color={COLORS.textSecondary}
-                fontSize={12}
-                fontWeight="700"
-                letterSpacing={1.5}
-                textTransform="uppercase"
-              >
-                {isLoadingTask ? 'Searching the web...' : 'Best Deals Found'}
-              </Text>
-              {hasResults && (
-                <Button
-                  size="$2"
-                  backgroundColor={isShowroomMode ? '#A78BFA' : COLORS.bgCard}
-                  borderRadius={10}
-                  borderWidth={1}
-                  borderColor={isShowroomMode ? '#A78BFA' : COLORS.borderSubtle}
-                  onPress={() => setIsShowroomMode(!isShowroomMode)}
-                  pressStyle={{ scale: 0.95 }}
-                >
-                  <Text color={isShowroomMode ? '#000' : COLORS.textSecondary} fontWeight="800" fontSize={11}>
-                    🏬 {isShowroomMode ? 'List' : 'Showroom'}
-                  </Text>
-                </Button>
-              )}
+              <XStack ai="center" gap={10}>
+                <TouchableOpacity onPress={() => setIsScannerVisible(true)} style={st.headerActionBtn} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="barcode-scan" size={19} color="#A78BFA" />
+                </TouchableOpacity>
+                <TouchableOpacity style={st.headerActionBtn} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="bell-outline" size={19} color="rgba(255,255,255,0.5)" />
+                  <View style={st.notifDot} />
+                </TouchableOpacity>
+              </XStack>
             </XStack>
+
+            {/* Hero text */}
+            <YStack px={24} mb={20}>
+              <Text color="#F0F6FC" fontSize={34} fontWeight="900" letterSpacing={-1.5} lineHeight={40}>
+                Find the{'\n'}best <Text color="#A78BFA" fontSize={34} fontWeight="900">price.</Text>
+              </Text>
+              <Text color="rgba(255,255,255,0.3)" fontSize={14} fontWeight="500" mt={6} lineHeight={20}>
+                Compare across Amazon, Flipkart, Myntra & more
+              </Text>
+            </YStack>
           </Animated.View>
-        )}
 
-        {/* Skeleton Loaders */}
-        {isLoadingTask && !hasResults && (
-          <YStack gap="$3">
-            <SkeletonCard delay={0} />
-            <SkeletonCard delay={200} />
-            <SkeletonCard delay={400} />
-          </YStack>
-        )}
+          {/* ── Search Bar ── */}
+          <Animated.View entering={FadeInUp.delay(100).duration(600)} style={{ paddingHorizontal: 24 }}>
+            <Animated.View style={[st.searchWrap, searchGlowStyle, { shadowColor: '#8B5CF6' }]}>
+              <MaterialCommunityIcons name="magnify" size={22} color={searchFocused ? '#A78BFA' : 'rgba(255,255,255,0.2)'} />
+              <TextInput
+                placeholder="Search any product or paste URL..."
+                placeholderTextColor="rgba(255,255,255,0.18)"
+                value={query}
+                onChangeText={setQuery}
+                onSubmitEditing={() => handleSearch()}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                returnKeyType="search"
+                autoCapitalize="none"
+                style={st.searchInput}
+              />
+              {isLoadingTask ? (
+                <Spinner size="small" color="#A78BFA" />
+              ) : query.length > 0 ? (
+                <TouchableOpacity onPress={() => handleSearch()} style={st.searchBtn} activeOpacity={0.8}>
+                  <LinearGradient colors={['#8B5CF6', '#6D28D9']} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name="arrow-right" size={18} color="#FFF" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => setIsVisualSearchVisible(true)} style={st.searchScanBtn} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="camera-iris" size={18} color="rgba(255,255,255,0.3)" />
+                </TouchableOpacity>
+              )}
+            </Animated.View>
 
-        {/* Product Cards & Stats */}
-        {hasResults && !isShowroomMode && (
-          <YStack gap="$4">
-            <PriceStatsBanner stats={priceStats} />
+            {/* Search Overlay (autocomplete + recent + trending) */}
+            <View style={{ paddingHorizontal: 24 }}>
+              <SearchOverlay
+                visible={searchFocused}
+                query={query}
+                onSelect={(text) => { setQuery(text); setSearchFocused(false); handleSearch(text); }}
+                onClose={() => setSearchFocused(false)}
+              />
+            </View>
+          </Animated.View>
+        </View>
 
-            {searchResults.map((item, index) => (
-              <ProductCard key={item.id || index} item={item} index={index} pushToken={expoPushToken} />
+        {/* ── Product Suggestions (for vague queries) ── */}
+        {hasSuggestions && !isLoadingTask && !hasResults && (
+          <YStack px={24} mt={20}>
+            <Animated.View entering={FadeIn.duration(400)}>
+              <XStack ai="center" gap={8} mb={14}>
+                <View style={st.sectionIcon}>
+                  <LinearGradient colors={['rgba(139,92,246,0.15)', 'rgba(59,130,246,0.08)']} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name="lightbulb-on-outline" size={16} color="#A78BFA" />
+                </View>
+                <YStack>
+                  <Text color="#F0F6FC" fontSize={18} fontWeight="900" letterSpacing={-0.3}>Did you mean?</Text>
+                  <Text color="rgba(255,255,255,0.3)" fontSize={11}>Tap a specific product to search</Text>
+                </YStack>
+              </XStack>
+            </Animated.View>
+            {productSuggestions.map((s, i) => (
+              <ProductSuggestionCard key={s.title} item={s} index={i} onPress={() => handleSuggestionTap(s)} />
             ))}
+            {smartData?.related_searches?.length > 0 && (
+              <Animated.View entering={FadeInUp.delay(400).duration(400)}>
+                <YStack mt={16}>
+                  <Text color="rgba(255,255,255,0.3)" fontSize={11} fontWeight="700" mb={8} pl={4}>RELATED SEARCHES</Text>
+                  <XStack flexWrap="wrap" gap={8}>
+                    {smartData.related_searches.map((rs: string, i: number) => (
+                      <TouchableOpacity key={i} onPress={() => handleSuggestionTap({ title: rs })} style={st.relatedChip} activeOpacity={0.7}>
+                        <MaterialCommunityIcons name="magnify" size={13} color="rgba(255,255,255,0.4)" />
+                        <Text color="rgba(255,255,255,0.5)" fontSize={12} fontWeight="600" ml={5}>{rs}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </XStack>
+                </YStack>
+              </Animated.View>
+            )}
           </YStack>
         )}
 
-        {/* 🏬 Showroom 3D Carousel Mode */}
-        {hasResults && isShowroomMode && (
-          <YStack>
-            <PriceStatsBanner stats={priceStats} />
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={SCREEN_WIDTH * 0.82}
-              decelerationRate="fast"
-              contentContainerStyle={{ paddingVertical: 16, paddingRight: SCREEN_WIDTH * 0.18 }}
-            >
-              {searchResults.map((item, idx) => (
-                <ShowroomCard key={item.id || idx} item={item} index={idx} />
-              ))}
-            </ScrollView>
-          </YStack>
-        )}
+        {/* ── Search Results State ── */}
+        {(isLoadingTask || hasResults) && (
+          <YStack px={24} mt={24}>
+            {isLoadingTask && !hasResults && (
+              <YStack gap={8}>
+                <Animated.View entering={FadeIn.duration(300)}>
+                  <XStack ai="center" gap={10} mb={12}>
+                    <View style={st.loadingOrb}>
+                      <LinearGradient colors={['rgba(139,92,246,0.2)', 'rgba(59,130,246,0.1)']} style={{ width: '100%', height: '100%', borderRadius: 20 }} />
+                      <Spinner size="small" color="#A78BFA" style={{ position: 'absolute' }} />
+                    </View>
+                    <YStack>
+                      <Text color="rgba(255,255,255,0.5)" fontSize={14} fontWeight="700">Hunting best prices...</Text>
+                      <Text color="rgba(255,255,255,0.2)" fontSize={11}>Scanning 6+ platforms</Text>
+                    </YStack>
+                  </XStack>
+                </Animated.View>
+                <SkeletonSearchResults />
+              </YStack>
+            )}
+            {hasResults && (
+              <>
+                <SectionTitle title="Results" subtitle={`${searchResults.length} of ${allResults.length} products`} icon="text-search" />
 
-        {/* Dashboard Feed (Empty State) */}
-        {!isLoadingTask && !hasResults && (
-          <YStack mt="$2">
+                {/* AI Summary Banner */}
+                {resultsSummary && (
+                  <SearchSummaryBanner
+                    summary={resultsSummary.summary}
+                    buySignal={resultsSummary.buySignal}
+                    buySignalReason={resultsSummary.buySignalReason}
+                  />
+                )}
 
-            <SavingsGoalCard />
-            <DailyLootDrop />
+                {/* Filter & Sort Bar */}
+                <FilterSortBar
+                  activeSort={activeSort}
+                  onSortChange={setActiveSort}
+                  activePlatforms={activePlatforms}
+                  onPlatformToggle={handlePlatformToggle}
+                  activePriceRange={activePriceRange}
+                  onPriceRangeChange={setActivePriceRange}
+                  priceRangeChips={smartData?.price_range_chips || []}
+                  platforms={resultPlatforms}
+                />
 
-            <Animated.View entering={FadeInUp.delay(400).duration(500)}>
-              <YStack mb="$6">
-                <Text color={COLORS.textPrimary} fontSize={18} fontWeight="800" mb="$3">
-                  🔥 Trending Drops Today
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ overflow: 'visible' }}>
-                  {isLoadingDeals ? (
-                    <XStack p="$4">
-                      <MiniSkeletonCard delay={0} />
-                      <MiniSkeletonCard delay={200} />
-                      <MiniSkeletonCard delay={400} />
+                {priceStats && <PriceStatsBanner stats={priceStats} />}
+
+                {/* Comparison Cards (grouped by product) */}
+                {comparisonGroups.length > 0 && (
+                  <YStack mb={8}>
+                    <XStack ai="center" gap={6} mb={10}>
+                      <MaterialCommunityIcons name="compare-horizontal" size={14} color={COLORS.brandBlue} />
+                      <Text color={COLORS.textTertiary} fontSize={11} fontWeight="800" textTransform="uppercase">Price Comparison</Text>
                     </XStack>
-                  ) : (
-                    trendingDeals.map((deal, idx) => (
-                      <MiniDealCard key={deal.id} item={deal} index={idx} pushToken={expoPushToken} />
-                    ))
-                  )}
+                    {comparisonGroups.map((group, i) => (
+                      <ComparisonCard key={i} group={group} onPress={(item) => { handleProductTap(item); }} />
+                    ))}
+                  </YStack>
+                )}
+
+                {/* No results after filtering */}
+                {searchResults.length === 0 && allResults.length > 0 && (
+                  <YStack ai="center" py={30} gap={8}>
+                    <MaterialCommunityIcons name="filter-off-outline" size={32} color="rgba(255,255,255,0.15)" />
+                    <Text color="rgba(255,255,255,0.4)" fontSize={14} fontWeight="600">No products match your filters</Text>
+                    <TouchableOpacity onPress={() => { setActivePlatforms([]); setActivePriceRange(null); setActiveSort('relevance'); }}>
+                      <Text color="#A78BFA" fontSize={13} fontWeight="700" mt={4}>Clear all filters</Text>
+                    </TouchableOpacity>
+                  </YStack>
+                )}
+
+                {searchResults.map((item, i) => (
+                  <SearchResultCard
+                    key={item.id || i}
+                    item={item}
+                    index={i}
+                    pushToken={expoPushToken}
+                    priceStats={priceStats}
+                    onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); setQuickActionsItem(item); }}
+                    onTap={handleProductTap}
+                    onShare={(itm) => setShareItem(itm)}
+                  />
+                ))}
+              </>
+            )}
+          </YStack>
+        )}
+
+        {/* ── Home Feed ── */}
+        {!hasResults && !isLoadingTask && !hasSuggestions && !searchFocused && (
+          <YStack mt={20}>
+            {/* Categories */}
+            <Animated.View entering={FadeInUp.delay(120).duration(500)}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 6 }}>
+                {CATEGORIES.map((cat, i) => (
+                  <CategoryCard key={cat.label} cat={cat} index={i} onPress={() => { setQuery(cat.label); handleSearch(cat.label); }} />
+                ))}
+              </ScrollView>
+            </Animated.View>
+
+            {/* Personalized "For You" Section */}
+            <PersonalizedSection onSearchPress={(q) => { setQuery(q); handleSearch(q); }} />
+
+            {/* Recently Viewed */}
+            <RecentlyViewedSection onProductPress={(product) => {
+              setQuery(product.title);
+              handleSearch(product.title);
+            }} />
+
+            {/* Quick Stats */}
+            <View style={{ marginTop: 20, marginBottom: 8 }}>
+              <QuickStats />
+            </View>
+
+            {/* Hero Deal */}
+            <YStack px={24} mt={8}>
+              <HeroDealBanner />
+            </YStack>
+
+            {/* Trending Section */}
+            <YStack mt={28}>
+              <YStack px={24}>
+                <SectionTitle title="Trending Now" subtitle="Hot deals right now" icon="fire" delay={100} action="See All" />
+              </YStack>
+              {isLoadingDeals ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                  {[0, 1, 2].map(i => <SkeletonCard key={i} delay={i * 200} />)}
                 </ScrollView>
-              </YStack>
-            </Animated.View>
+              ) : trendingDeals.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} decelerationRate="fast" snapToInterval={SW * 0.78 + 16} snapToAlignment="start">
+                  {trendingDeals.map((deal, i) => <TrendingCard key={deal.id || i} item={deal} index={i} />)}
+                </ScrollView>
+              ) : (
+                <YStack ai="center" py={24} px={24}>
+                  <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,123,0,0.08)', justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="fire" size={24} color="rgba(255,123,0,0.3)" />
+                  </View>
+                  <Text color="rgba(255,255,255,0.3)" fontSize={13} fontWeight="600" mt={10} ta="center">No trending deals yet</Text>
+                  <Text color="rgba(255,255,255,0.15)" fontSize={11} mt={4} ta="center">Search for products to discover the best prices</Text>
+                </YStack>
+              )}
+            </YStack>
 
-            <Animated.View entering={FadeInUp.delay(500).duration(500)}>
-              <YStack mb="$6">
-                <Text color={COLORS.textPrimary} fontSize={18} fontWeight="800" mb="$3">
-                  ✨ Curated For You
-                </Text>
+            {/* For You Section */}
+            <YStack px={24} mt={28}>
+              <SectionTitle title="Picked for You" subtitle="Based on your interests" icon="star-four-points" delay={200} action="See All" />
+              {forYouDeals.length > 0 ? (
                 <XStack flexWrap="wrap" jc="space-between">
-                  {isLoadingDeals ? (
-                    <XStack p="$4" width="100%" jc="space-between">
-                      <MiniSkeletonCard delay={0} />
-                      <MiniSkeletonCard delay={200} />
-                    </XStack>
-                  ) : (
-                    forYouDeals.map((deal, idx) => (
-                      <YStack key={deal.id} width="48%" mb="$4">
-                        <MiniDealCard item={deal} index={idx} pushToken={expoPushToken} />
-                      </YStack>
-                    ))
-                  )}
+                  {forYouDeals.map((deal, i) => <ForYouCard key={deal.id || i} item={deal} index={i} />)}
                 </XStack>
-              </YStack>
-            </Animated.View>
+              ) : (
+                <YStack ai="center" py={20}>
+                  <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(139,92,246,0.08)', justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="star-four-points" size={24} color="rgba(139,92,246,0.3)" />
+                  </View>
+                  <Text color="rgba(255,255,255,0.3)" fontSize={13} fontWeight="600" mt={10}>Personalized picks coming soon</Text>
+                  <Text color="rgba(255,255,255,0.15)" fontSize={11} mt={4}>Search & compare to unlock recommendations</Text>
+                </YStack>
+              )}
+            </YStack>
 
+            {/* Savings Card */}
+            <YStack px={24} mt={12} mb={16}>
+              <Animated.View entering={FadeInUp.delay(400).duration(500)}>
+                <View style={st.savingsCard}>
+                  <LinearGradient colors={['rgba(63,185,80,0.06)', 'rgba(63,185,80,0.02)']} style={StyleSheet.absoluteFill} />
+                  <XStack ai="center" gap={16}>
+                    <View style={st.savingsIcon}>
+                      <LinearGradient colors={['rgba(63,185,80,0.15)', 'rgba(63,185,80,0.05)']} style={StyleSheet.absoluteFill} />
+                      <MaterialCommunityIcons name="piggy-bank-outline" size={24} color="#3FB950" />
+                    </View>
+                    <YStack f={1}>
+                      <Text color="rgba(255,255,255,0.35)" fontSize={10} fontWeight="700" textTransform="uppercase" letterSpacing={0.5}>Your Savings</Text>
+                      <Text color="#3FB950" fontSize={28} fontWeight="900" letterSpacing={-1}>₹0</Text>
+                    </YStack>
+                    <YStack ai="center" gap={4}>
+                      <Text color="rgba(255,255,255,0.2)" fontSize={9} fontWeight="600" textTransform="uppercase">Goal</Text>
+                      <Text color="rgba(255,255,255,0.5)" fontSize={16} fontWeight="900">₹5,000</Text>
+                      <View style={st.goalBar}>
+                        <View style={[st.goalFill, { width: '0%' }]} />
+                      </View>
+                    </YStack>
+                  </XStack>
+                </View>
+              </Animated.View>
+            </YStack>
           </YStack>
         )}
-      </YStack>
+      </ScrollView>
 
-      <Modal
-        visible={isScannerVisible}
-        animationType="slide"
-        onRequestClose={() => setIsScannerVisible(false)}
-      >
-        <ScannerModal
-          onClose={() => setIsScannerVisible(false)}
-          onScan={(data) => {
-            setIsScannerVisible(false);
-            setQuery(data);
-            handleSearch(data);
-          }}
-        />
-      </Modal>
-    </ScrollView>
+      <ScannerModal visible={isScannerVisible} onClose={() => setIsScannerVisible(false)} onBarcodeScanned={(barcode: string) => { setIsScannerVisible(false); setQuery(barcode); handleSearch(barcode); }} />
+      <VisualSearchModal visible={isVisualSearchVisible} onClose={() => setIsVisualSearchVisible(false)} onResult={handleVisualSearchResult} />
+      <QuickActionsMenu
+        visible={!!quickActionsItem}
+        onClose={() => setQuickActionsItem(null)}
+        productTitle={quickActionsItem?.title || ''}
+        actions={quickActions}
+      />
+      <ShareSheet
+        visible={!!shareItem}
+        onClose={() => setShareItem(null)}
+        product={{
+          title: shareItem?.title || '',
+          price: shareItem?.price_inr || 0,
+          originalPrice: shareItem?.original_price_inr,
+          platform: shareItem?.platform,
+          imageUrl: shareItem?.image_url,
+          slug: (shareItem?.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80),
+        }}
+      />
+    </View>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────
-const styles = StyleSheet.create({
-  headerGradient: {
-    paddingTop: 70,
-    paddingBottom: 50,
-    paddingHorizontal: 24,
+// ═══════════════════════════════════════════════════════
+// ─── STYLES ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+const st = StyleSheet.create({
+  // Header
+  logoDot: { width: 10, height: 10, borderRadius: 5, overflow: 'hidden' },
+  headerActionBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  headerContent: {
-    alignItems: 'center',
+  notifDot: {
+    position: 'absolute', top: 10, right: 10, width: 6, height: 6, borderRadius: 3,
+    backgroundColor: '#DC2626',
   },
-  card: {
-    backgroundColor: COLORS.bgCard,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderSubtle,
+
+  // Search
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 18, borderWidth: 1,
+    paddingHorizontal: 16, height: 56, gap: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  searchInput: {
+    flex: 1, height: 56, color: '#F0F6FC', fontSize: 15, fontWeight: '500',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
+  },
+  searchBtn: { width: 38, height: 38, borderRadius: 13, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  searchScanBtn: { width: 38, height: 38, borderRadius: 13, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)' },
+
+  // Categories
+  catCard: {
+    alignItems: 'center', width: 72, paddingVertical: 12,
+  },
+  catIconWrap: {
+    width: 48, height: 48, borderRadius: 16, overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Quick Stats
+  quickStatCard: {
+    flex: 1, alignItems: 'center', paddingVertical: 16,
+    borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
+  },
+  quickStatIcon: {
+    width: 36, height: 36, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Section
+  sectionIcon: {
+    width: 34, height: 34, borderRadius: 11, overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+
+  // Trending
+  trendCard: {
+    borderRadius: 20, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  trendImageWrap: { height: 200, backgroundColor: 'rgba(255,255,255,0.02)' },
+  trendDiscount: {
+    position: 'absolute', top: 12, left: 12,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4,
     overflow: 'hidden',
   },
-  skeletonThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
-    backgroundColor: COLORS.bgCardHover,
+  trendPlatform: {
+    position: 'absolute', top: 12, right: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1,
   },
-  skeletonLine: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: COLORS.bgCardHover,
+  platformDot: { width: 5, height: 5, borderRadius: 2.5 },
+  trendOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16 },
+  trendSaveBadge: {
+    backgroundColor: 'rgba(63,185,80,0.12)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
   },
-  skeletonBadge: {
-    height: 20,
-    width: 60,
-    borderRadius: 6,
-    backgroundColor: COLORS.bgCardHover,
-    marginTop: 4,
+  trendArrow: {
+    width: 30, height: 30, borderRadius: 10,
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Grid
+  gridCard: {
+    borderRadius: 18, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  gridImageWrap: { height: 140, backgroundColor: 'rgba(255,255,255,0.02)' },
+  gridDiscount: {
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: 'rgba(220,38,38,0.85)', borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+
+  // Hero Deal
+  heroBanner: {
+    borderRadius: 22, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)',
+    shadowOffset: { width: 0, height: 0 },
+  },
+  heroOrb: {
+    position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: 60,
+  },
+  heroImageWrap: {
+    width: 90, height: 90, borderRadius: 18, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  liveDot: {
+    width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#3FB950',
+    shadowColor: '#3FB950', shadowOpacity: 0.8, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+  },
+  timerBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  claimBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' },
+  claimFill: { height: '100%', borderRadius: 2, overflow: 'hidden' },
+  heroCTA: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    height: 46, overflow: 'hidden', gap: 8,
+  },
+
+  // Results
+  resultCard: {
+    borderRadius: 20, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  resultBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 8, overflow: 'hidden',
+  },
+  resultImage: {
+    width: 88, height: 88, borderRadius: 16, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  resultPlatformDot: { width: 5, height: 5, borderRadius: 2.5 },
+  wishlistCorner: {
+    position: 'absolute', top: 14, right: 14,
+  },
+  fakeSaleBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)',
+  },
+  aiCard: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    marginHorizontal: 14, marginBottom: 10, padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  actionBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1,
+  },
+
+  // Stats
+  statsCard: {
+    borderRadius: 18, overflow: 'hidden', padding: 18,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  trendBadge: {
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  statBlock: { paddingVertical: 4 },
+  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+
+  // Loading
+  loadingOrb: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
+  },
+
+  // Savings
+  savingsCard: {
+    borderRadius: 20, overflow: 'hidden', padding: 20,
+    borderWidth: 1, borderColor: 'rgba(63,185,80,0.08)',
+  },
+  savingsIcon: {
+    width: 52, height: 52, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+  },
+  goalBar: {
+    width: 60, height: 3, borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginTop: 4,
+  },
+  goalFill: {
+    height: '100%', borderRadius: 1.5, backgroundColor: '#3FB950',
+  },
+
+  // Product Suggestion Cards
+  suggCard: {
+    borderRadius: 16, overflow: 'hidden', padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.1)',
+  },
+  suggIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  suggTag: {
+    backgroundColor: 'rgba(139,92,246,0.1)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)',
+  },
+  relatedChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+
+  // Filter & Sort Bar
+  filterChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  filterChipActive: {
+    backgroundColor: 'rgba(139,92,246,0.2)',
+    borderColor: 'rgba(139,92,246,0.4)',
+  },
+  platformFilterDot: {
+    width: 6, height: 6, borderRadius: 3,
+  },
+
+  // Search Summary Banner
+  summaryBanner: {
+    borderRadius: 16, padding: 14, marginBottom: 14, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.1)',
+  },
+  buySignalPill: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
+    borderWidth: 1,
+  },
+
+  // Buy Signal Inline Badge
+  buySignalInline: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
+    borderWidth: 1,
+  },
+
+  // Comparison Card
+  comparisonCard: {
+    borderRadius: 16, padding: 14, marginBottom: 10, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(59,130,246,0.1)',
+  },
+  compSavingsBadge: {
+    backgroundColor: 'rgba(63,185,80,0.1)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  compPlatformRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10,
+  },
+  compBestRow: {
+    backgroundColor: 'rgba(63,185,80,0.06)',
+  },
+  compPlatformDot: {
+    width: 6, height: 6, borderRadius: 3,
+  },
+  compBestBadge: {
+    backgroundColor: 'rgba(63,185,80,0.15)', borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2, marginLeft: 6,
+  },
+
+  // Recently Viewed
+  recentCard: {
+    width: 140, borderRadius: 16, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  recentImageWrap: {
+    height: 100, backgroundColor: 'rgba(255,255,255,0.02)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Personalized Section
+  personalizedChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  topCatChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
 });

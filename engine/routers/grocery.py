@@ -16,46 +16,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Grocery"])
 
 
-def _allow_mock_fallbacks() -> bool:
-    return os.getenv("ALLOW_MOCK_FALLBACKS", "true").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _build_mock_search_response(query: str) -> dict:
-    mock_products = [
-        {
-            "title": f"{query} - Amazon",
-            "price_inr": 999.0,
-            "image_url": "https://via.placeholder.com/200x200.png?text=Amazon",
-            "product_url": "https://amazon.in",
-            "platform": "Amazon",
-            "original_price_inr": 1299.0,
-            "discount_percent": 23.1,
-            "rating": 4.3,
-        },
-        {
-            "title": f"{query} - Flipkart",
-            "price_inr": 1049.0,
-            "image_url": "https://via.placeholder.com/200x200.png?text=Flipkart",
-            "product_url": "https://flipkart.com",
-            "platform": "Flipkart",
-            "original_price_inr": 1399.0,
-            "discount_percent": 25.0,
-            "rating": 4.2,
-        },
-    ]
-    return {
-        "query": query,
-        "total_results": len(mock_products),
-        "best_price": {
-            "price_inr": mock_products[0]["price_inr"],
-            "platform": mock_products[0]["platform"],
-            "title": mock_products[0]["title"],
-            "savings_from_max": round(mock_products[-1]["price_inr"] - mock_products[0]["price_inr"], 2),
-        },
-        "price_stats": None,
-        "products": mock_products,
-    }
-
 class SearchRequest(BaseModel):
     query: str
 
@@ -79,7 +39,7 @@ class GroceryWatchCreateRequest(BaseModel):
 async def search_endpoint(request: SearchRequest, response: Response, req: Request):
     """
     Receives a search query. First checks Redis; if found, returns 200 OK.
-    Otherwise triggers a Celery task asynchronously and returns a 202 Accepted status 
+    Otherwise triggers a Celery task asynchronously and returns a 202 Accepted status
     along with the task_id.
     """
     cached_result = None
@@ -101,16 +61,10 @@ async def search_endpoint(request: SearchRequest, response: Response, req: Reque
             response.status_code = status.HTTP_202_ACCEPTED
             return {"message": "Search queued", "task_id": task.id}
         except Exception as e:
-            logger.warning(f"Celery unavailable, returning mock search response: {e}")
-            if not _allow_mock_fallbacks():
-                response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-                return {"error": "Search service unavailable"}
+            logger.warning(f"Celery unavailable for search: {e}")
 
-    if not _allow_mock_fallbacks():
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"error": "Search service unavailable"}
-    response.status_code = status.HTTP_200_OK
-    return _build_mock_search_response(request.query)
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"error": "Search service unavailable"}
 
 
 @router.get("/scan/{barcode}")
@@ -138,16 +92,10 @@ async def scan_barcode(barcode: str, response: Response, req: Request):
             response.status_code = status.HTTP_202_ACCEPTED
             return {"message": "Scan queued", "task_id": task.id}
         except Exception as e:
-            logger.warning(f"Celery unavailable for barcode scan, returning mock response: {e}")
-            if not _allow_mock_fallbacks():
-                response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-                return {"error": "Scan service unavailable"}
+            logger.warning(f"Celery unavailable for barcode scan: {e}")
 
-    if not _allow_mock_fallbacks():
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"error": "Scan service unavailable"}
-    response.status_code = status.HTTP_200_OK
-    return _build_mock_search_response(barcode)
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"error": "Search service unavailable"}
 
 @router.get("/results/{task_id}")
 async def get_results(task_id: str, response: Response):
@@ -179,7 +127,7 @@ async def get_price_history(query: str, response: Response):
     if not supabase_client:
         response.status_code = 500
         return {"error": "Supabase not configured"}
-        
+
     try:
         res = supabase_client.table("price_history").select("*").eq("query", query).order("recorded_at").execute()
         return {"query": query, "history": res.data}
@@ -202,7 +150,7 @@ async def get_price_forecast(query: str, current_price: float, response: Respons
                 "price": round(price)
             })
             base_price = price - (base_price - current_price) / i
-            
+
         history.append({
             "date": "Now",
             "price": round(current_price)
@@ -211,11 +159,11 @@ async def get_price_forecast(query: str, current_price: float, response: Respons
         api_key = os.getenv("GEMINI_API_KEY")
         forecast_path = []
         reasoning = "Based on general market trends, prices are expected to remain stable."
-        
+
         if api_key:
             client = genai.Client(api_key=api_key)
             prompt = f"Product: {query}. Current price: ₹{current_price}. Predict the price trend for the next 2 months. Return a JSON object with 'next_month_price' (number), 'two_months_price' (number), and a short 1-sentence 'reasoning'."
-            
+
             ai_response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt,
@@ -224,7 +172,7 @@ async def get_price_forecast(query: str, current_price: float, response: Respons
                     temperature=0.5,
                 ),
             )
-            
+
             try:
                 ai_data = json.loads(ai_response.text.strip())
                 forecast_path = [
@@ -347,8 +295,8 @@ async def create_grocery_watch_item(req: GroceryWatchCreateRequest, response: Re
 @router.post("/grocery/split-checkout/{deal_id}")
 async def split_checkout(deal_id: str, response: Response):
     """
-    Collaborative Split Cart: Calculates the optimized total price for a 
-    group deal, divides it among participants, and returns a mock UPI 
+    Collaborative Split Cart: Calculates the optimized total price for a
+    group deal, divides it among participants, and returns a mock UPI
     deep link for each member's share.
     """
     from tasks.scrapers import supabase_client

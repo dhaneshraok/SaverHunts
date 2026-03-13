@@ -152,8 +152,8 @@ async def _search_platform(query: str, platform: dict) -> list[dict]:
     return results
 
 
-async def _search_all_platforms(query: str) -> list[dict]:
-    """Search all grocery platforms in parallel."""
+async def _search_serpapi_all(query: str) -> list[dict]:
+    """Search all grocery platforms via SerpAPI (fallback)."""
     tasks = [_search_platform(query, p) for p in GROCERY_PLATFORMS]
     platform_results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -161,10 +161,36 @@ async def _search_all_platforms(query: str) -> list[dict]:
     for result in platform_results:
         if isinstance(result, list):
             all_results.extend(result)
+    return all_results
+
+
+async def _search_all_platforms(query: str) -> list[dict]:
+    """
+    Search all grocery platforms using a two-tier strategy:
+    1. Direct HTTP scrapers (free, real-time) for Blinkit, Zepto, BigBasket
+    2. SerpAPI fallback (paid, delayed) if direct scrapers return < 3 results
+    """
+    from tasks.grocery_platform_scrapers import scrape_all_grocery_platforms
+
+    # Tier 1: Direct platform scrapers
+    products = await scrape_all_grocery_platforms(query)
+    logger.info(f"Grocery direct scrapers: {len(products)} results for '{query}'")
+
+    # Tier 2: SerpAPI fallback if direct scrapers return too few results
+    if len(products) < 3 and SERPAPI_KEY:
+        logger.info(f"Grocery: falling back to SerpAPI for '{query}' ({len(products)} direct results)")
+        serpapi_results = await _search_serpapi_all(query)
+        # Merge, avoiding duplicates by platform+title
+        existing = {(p["platform"], p["title"][:50]) for p in products}
+        for item in serpapi_results:
+            key = (item["platform"], item["title"][:50])
+            if key not in existing:
+                products.append(item)
+                existing.add(key)
 
     # Sort by price (cheapest first), then by delivery time
-    all_results.sort(key=lambda x: (x.get("price_inr") or 99999, x.get("delivery_mins") or 999))
-    return all_results
+    products.sort(key=lambda x: (x.get("price_inr") or 99999, x.get("delivery_mins") or 999))
+    return products
 
 
 def _build_grocery_response(query: str, products: list[dict]) -> dict:

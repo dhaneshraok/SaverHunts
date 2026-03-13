@@ -51,6 +51,16 @@ def _inject_amazon_tag(url: str, tag: str) -> str:
         return f"{url}{separator}tag={tag}"
 
 
+def is_affiliate_platform(platform: str) -> bool:
+    """Check if the given platform has affiliate credentials configured."""
+    platform_lower = platform.lower()
+    if "amazon" in platform_lower and os.getenv("AMAZON_PARTNER_TAG"):
+        return True
+    if "flipkart" in platform_lower and os.getenv("FLIPKART_AFFILIATE_ID"):
+        return True
+    return False
+
+
 def get_affiliate_info() -> dict:
     """Return which affiliate programs are configured."""
     return {

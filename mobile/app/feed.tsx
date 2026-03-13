@@ -49,11 +49,11 @@ import { Video, ResizeMode } from 'expo-av';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 
-import { COLORS, PLATFORM_BRANDS, GRADIENTS } from '../../constants/Theme';
-import { WishlistButton } from '../../components/WishlistButton';
-import { FlashDealBadge } from '../../components/DealTimer';
-import { SkeletonFeedReel } from '../../components/SkeletonLoader';
-import { EmptyFeed } from '../../components/EmptyStates';
+import { COLORS, PLATFORM_BRANDS, GRADIENTS } from '../constants/Theme';
+import { WishlistButton } from '../components/WishlistButton';
+import { FlashDealBadge } from '../components/DealTimer';
+import { SkeletonFeedReel } from '../components/SkeletonLoader';
+import { EmptyFeed } from '../components/EmptyStates';
 
 // ── Dimensions ───────────────────────────────────────────
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -143,7 +143,7 @@ interface FeedResponse {
 }
 
 // ── Animated Components ──────────────────────────────────
-const AnimatedImage = Animated.createAnimatedComponent(ExpoImage as any);
+const AnimatedImage = Animated.createAnimatedComponent(ExpoImage as any) as any;
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
@@ -350,7 +350,7 @@ function ActionColumn({
   onBuyPress: () => void;
 }) {
   const [saved, setSaved] = useState(false);
-  const product = reel.products[0];
+  const product = reel.products?.[0];
 
   const handleSave = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -361,7 +361,7 @@ function ActionColumn({
   const handleShare = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     trackInteraction(reel.id, 'share');
-    const product = reel.products[0];
+    const product = reel.products?.[0];
     try {
       await Share.share({
         message: `Check out this deal on SaverHunt!\n${product?.title || reel.title}\n${'\u20B9'}${formatPrice(product?.price_inr || 0)} on ${product?.platform || 'multiple platforms'}`,
@@ -579,7 +579,7 @@ const DealReel = React.memo(
   ({ reel, isActive }: { reel: ReelCard; isActive: boolean }) => {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const product = reel.products[0];
+    const product = reel.products?.[0];
     const kenBurns = useSharedValue(1);
     const fadeIn = useSharedValue(0);
 
@@ -742,7 +742,7 @@ const PriceDropReel = React.memo(
   ({ reel, isActive }: { reel: ReelCard; isActive: boolean }) => {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const product = reel.products[0];
+    const product = reel.products?.[0];
     const scaleIn = useSharedValue(0);
     const priceHistory = reel.metadata.price_history || [];
     const savings = reel.metadata.savings_amount || 0;
@@ -1207,7 +1207,7 @@ const TrendingReel = React.memo(
   ({ reel, isActive }: { reel: ReelCard; isActive: boolean }) => {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const product = reel.products[0];
+    const product = reel.products?.[0];
     const trendCount = reel.metadata.trending_count || 0;
     const [displayCount, setDisplayCount] = useState(0);
     const kenBurns = useSharedValue(1);
@@ -1400,7 +1400,7 @@ const FlashDealReel = React.memo(
   ({ reel, isActive }: { reel: ReelCard; isActive: boolean }) => {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const product = reel.products[0];
+    const product = reel.products?.[0];
     const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 });
     const [stockLeft] = useState(Math.floor(Math.random() * 20) + 3);
     const pulseScale = useSharedValue(1);

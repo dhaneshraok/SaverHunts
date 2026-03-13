@@ -14,14 +14,16 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
+from app.utils.auth import get_current_user, require_user_match, AuthUser
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from app.utils.rate_limiter import rate_limit
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit(60))])
 
 # Supabase client
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -91,7 +93,7 @@ async def register_push_token(body: PushTokenRequest, response: Response):
     except Exception as e:
         logger.error(f"Push token registration failed: {e}")
         response.status_code = 500
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": "An internal error occurred"}
 
 
 # ─── GET /user/{user_id} ─────────────────────────────
@@ -138,18 +140,24 @@ async def get_user_profile(user_id: str, response: Response):
     except Exception as e:
         logger.warning(f"Get profile failed: {e}")
         response.status_code = 500
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": "An internal error occurred"}
 
 
 # ─── POST /user/premium ──────────────────────────────
 
 @router.post("/user/premium")
-async def toggle_premium(body: PremiumToggleRequest, response: Response):
+async def toggle_premium(
+    body: PremiumToggleRequest,
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
     """
-    Activate or deactivate premium status.
+    Activate or deactivate premium status. Requires auth.
     In production, this would be called by a webhook from RevenueCat/Stripe.
     For now, it's a direct toggle for development + testing.
     """
+    require_user_match(user, body.user_id)
+
     if not supabase_client:
         response.status_code = 503
         return {"status": "error", "error": "Service unavailable"}
@@ -167,16 +175,16 @@ async def toggle_premium(body: PremiumToggleRequest, response: Response):
 
         existing = supabase_client.table("user_profiles") \
             .select("auth_id") \
-            .eq("auth_id", body.user_id) \
+            .eq("auth_id", user.id) \
             .execute()
 
         if existing.data:
             supabase_client.table("user_profiles") \
                 .update(update_data) \
-                .eq("auth_id", body.user_id) \
+                .eq("auth_id", user.id) \
                 .execute()
         else:
-            update_data["auth_id"] = body.user_id
+            update_data["auth_id"] = user.id
             update_data["ai_credits_used"] = 0
             update_data["saver_tokens"] = 0
             supabase_client.table("user_profiles") \
@@ -191,7 +199,7 @@ async def toggle_premium(body: PremiumToggleRequest, response: Response):
     except Exception as e:
         logger.error(f"Premium toggle failed: {e}")
         response.status_code = 500
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": "An internal error occurred"}
 
 
 # ─── GET /user/{user_id}/usage ────────────────────────
@@ -229,4 +237,4 @@ async def get_usage_stats(user_id: str, response: Response):
     except Exception as e:
         logger.warning(f"Usage stats query failed: {e}")
         response.status_code = 500
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": "An internal error occurred"}

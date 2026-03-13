@@ -3,7 +3,7 @@ import logging
 import os
 import datetime
 import random
-from fastapi import APIRouter, status, Response, Request
+from fastapi import APIRouter, Depends, status, Response, Request
 from pydantic import BaseModel
 from celery.result import AsyncResult
 from google import genai
@@ -11,6 +11,7 @@ from google.genai import types
 
 from tasks.scrapers import dummy_scrape
 from tasks.celery_app import celery_app
+from app.utils.rate_limiter import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Grocery"])
@@ -35,7 +36,7 @@ class GroceryWatchCreateRequest(BaseModel):
     item_name: str
     target_price: float | None = None
 
-@router.post("/search")
+@router.post("/search", dependencies=[Depends(rate_limit(30))])
 async def search_endpoint(request: SearchRequest, response: Response, req: Request):
     """
     Receives a search query. First checks Redis; if found, returns 200 OK.
@@ -67,7 +68,7 @@ async def search_endpoint(request: SearchRequest, response: Response, req: Reque
     return {"error": "Search service unavailable"}
 
 
-@router.get("/scan/{barcode}")
+@router.get("/scan/{barcode}", dependencies=[Depends(rate_limit(30))])
 async def scan_barcode(barcode: str, response: Response, req: Request):
     """
     Barcode compatibility endpoint.
@@ -97,7 +98,7 @@ async def scan_barcode(barcode: str, response: Response, req: Request):
     response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {"error": "Search service unavailable"}
 
-@router.get("/results/{task_id}")
+@router.get("/results/{task_id}", dependencies=[Depends(rate_limit(120))])
 async def get_results(task_id: str, response: Response):
     """
     Poll for results of a Celery task by task_id.
@@ -114,28 +115,14 @@ async def get_results(task_id: str, response: Response):
 
     elif task_result.state == "FAILURE":
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return {"status": "failed", "error": str(task_result.info)}
+        logger.error(f"Celery task {task_id} failed: {task_result.info}")
+        return {"status": "failed", "error": "Search task failed"}
 
     else:
         response.status_code = status.HTTP_202_ACCEPTED
         return {"status": task_result.state.lower(), "task_id": task_id}
 
-@router.get("/price-history/{query}")
-async def get_price_history(query: str, response: Response):
-    """Fetch the historic price trend for a specific product query."""
-    from tasks.scrapers import supabase_client
-    if not supabase_client:
-        response.status_code = 500
-        return {"error": "Supabase not configured"}
-
-    try:
-        res = supabase_client.table("price_history").select("*").eq("query", query).order("recorded_at").execute()
-        return {"query": query, "history": res.data}
-    except Exception as e:
-        response.status_code = 500
-        return {"error": str(e)}
-
-@router.get("/price-history/forecast")
+@router.get("/price-history/forecast", dependencies=[Depends(rate_limit(120))])
 async def get_price_forecast(query: str, current_price: float, response: Response):
     try:
         history = []
@@ -199,9 +186,24 @@ async def get_price_forecast(query: str, current_price: float, response: Respons
     except Exception as e:
         logger.error(f"Forecast error: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
-@router.post("/alerts")
+@router.get("/price-history/{query}", dependencies=[Depends(rate_limit(120))])
+async def get_price_history(query: str, response: Response):
+    """Fetch the historic price trend for a specific product query."""
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 500
+        return {"error": "Supabase not configured"}
+
+    try:
+        res = supabase_client.table("price_history").select("*").eq("query", query).order("recorded_at").execute()
+        return {"query": query, "history": res.data}
+    except Exception as e:
+        response.status_code = 500
+        return {"error": "An internal error occurred"}
+
+@router.post("/alerts", dependencies=[Depends(rate_limit(60))])
 async def create_alert(alert: AlertRequest, response: Response):
     """Create a price drop alert for a user."""
     from tasks.scrapers import supabase_client
@@ -219,10 +221,10 @@ async def create_alert(alert: AlertRequest, response: Response):
         return {"message": "Alert created successfully", "alert": res.data[0]}
     except Exception as e:
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
-@router.get("/grocery/lists/{user_id}")
+@router.get("/grocery/lists/{user_id}", dependencies=[Depends(rate_limit(60))])
 async def get_grocery_lists(user_id: str, response: Response):
     from tasks.scrapers import supabase_client
     if not supabase_client:
@@ -234,10 +236,10 @@ async def get_grocery_lists(user_id: str, response: Response):
     except Exception as e:
         logger.error(f"Get grocery lists failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
-@router.post("/grocery/lists")
+@router.post("/grocery/lists", dependencies=[Depends(rate_limit(60))])
 async def create_grocery_list(req: GroceryListCreateRequest, response: Response):
     from tasks.scrapers import supabase_client
     if not supabase_client:
@@ -253,10 +255,10 @@ async def create_grocery_list(req: GroceryListCreateRequest, response: Response)
     except Exception as e:
         logger.error(f"Create grocery list failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
-@router.get("/grocery/watch/{user_id}")
+@router.get("/grocery/watch/{user_id}", dependencies=[Depends(rate_limit(60))])
 async def get_grocery_watch_items(user_id: str, response: Response):
     from tasks.scrapers import supabase_client
     if not supabase_client:
@@ -268,10 +270,10 @@ async def get_grocery_watch_items(user_id: str, response: Response):
     except Exception as e:
         logger.error(f"Get grocery watch items failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
-@router.post("/grocery/watch")
+@router.post("/grocery/watch", dependencies=[Depends(rate_limit(60))])
 async def create_grocery_watch_item(req: GroceryWatchCreateRequest, response: Response):
     from tasks.scrapers import supabase_client
     if not supabase_client:
@@ -289,10 +291,10 @@ async def create_grocery_watch_item(req: GroceryWatchCreateRequest, response: Re
     except Exception as e:
         logger.error(f"Create grocery watch item failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
-@router.post("/grocery/split-checkout/{deal_id}")
+@router.post("/grocery/split-checkout/{deal_id}", dependencies=[Depends(rate_limit(60))])
 async def split_checkout(deal_id: str, response: Response):
     """
     Collaborative Split Cart: Calculates the optimized total price for a
@@ -345,4 +347,4 @@ async def split_checkout(deal_id: str, response: Response):
     except Exception as e:
         logger.error(f"Split checkout error: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}

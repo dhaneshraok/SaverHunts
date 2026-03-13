@@ -4,13 +4,14 @@ import os
 import base64
 import uuid
 from typing import Optional
-from fastapi import APIRouter, status, Response
+from fastapi import APIRouter, Depends, status, Response
 from pydantic import BaseModel
+from app.utils.rate_limiter import rate_limit
 from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/ai", tags=["AI"])
+router = APIRouter(prefix="/api/v1/ai", tags=["AI"], dependencies=[Depends(rate_limit(10))])
 
 # --- Gift Concierge ---
 class GiftConciergeRequest(BaseModel):

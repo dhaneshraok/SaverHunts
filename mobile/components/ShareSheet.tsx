@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -20,6 +20,8 @@ import * as Haptics from 'expo-haptics';
 
 import { COLORS, RADIUS, FONTS } from '../constants/Theme';
 import { storage } from '../lib/storage';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 // ─── Types ───────────────────────────────────────────
 export interface ShareSheetProps {
@@ -73,25 +75,10 @@ function trackShare(slug: string, platform: string) {
 }
 
 // ─── Share Message Builder ───────────────────────────
-function buildShareMessage(product: ShareSheetProps['product']): string {
-  const savings =
-    product.originalPrice && product.originalPrice > product.price
-      ? product.originalPrice - product.price
-      : null;
-  const deepLink = `${DEEP_LINK_BASE}${product.slug}`;
+function buildShareMessage(product: ShareSheetProps['product'], deepLink?: string): string {
+  const link = deepLink || `${DEEP_LINK_BASE}${product.slug}`;
 
-  let message = `\u{1F525} ${product.title}`;
-  message += `\n\u{1F4B0} \u20B9${product.price.toLocaleString('en-IN')}`;
-  if (savings) {
-    message += ` (Save \u20B9${savings.toLocaleString('en-IN')}!)`;
-  }
-  if (product.platform) {
-    message += `\n\u{1F4F1} Best price on ${product.platform}`;
-  }
-  message += `\n\nCompare prices: ${deepLink}`;
-  message += `\n\nFound on SaverHunt \u2014 India's smartest price tracker!`;
-
-  return message;
+  return `Check out this deal on SaverHunt! ${product.title} at \u20B9${product.price.toLocaleString('en-IN')} on ${product.platform || 'best price'} \u{1F525}\n${link}`;
 }
 
 function buildDeepLink(slug: string): string {
@@ -259,12 +246,57 @@ export default function ShareSheet({
   const [shareAsImage, setShareAsImage] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [isCreatingLink, setIsCreatingLink] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2200);
   }, []);
+
+  // Create a share link via the backend when the sheet opens
+  const ensureShareLink = useCallback(async (): Promise<string | null> => {
+    if (shareLink) return shareLink;
+    setIsCreatingLink(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || 'anonymous';
+      const res = await api.createShareLink(userId, {
+        title: product.title,
+        price: product.price,
+        platform: product.platform || '',
+        product_url: product.slug ? `${DEEP_LINK_BASE}${product.slug}` : undefined,
+        image_url: product.imageUrl,
+      });
+      if (res.status === 'success' && res.data?.share_url) {
+        setShareLink(res.data.share_url);
+        return res.data.share_url;
+      }
+      // Also check top-level share_url (API returns it at top level)
+      if (res.status === 'success' && (res as any).share_url) {
+        setShareLink((res as any).share_url);
+        return (res as any).share_url;
+      }
+    } catch {
+      // Fallback to static deep link
+    } finally {
+      setIsCreatingLink(false);
+    }
+    return null;
+  }, [shareLink, product]);
+
+  // Reset share link when product changes
+  useEffect(() => {
+    setShareLink(null);
+  }, [product.slug]);
+
+  // Pre-create the share link when sheet becomes visible
+  useEffect(() => {
+    if (visible && !shareLink && !isCreatingLink) {
+      ensureShareLink();
+    }
+  }, [visible]);
 
   const handleShareComplete = useCallback(
     (platform: string) => {
@@ -277,34 +309,63 @@ export default function ShareSheet({
     [product.slug, onClose, showToast]
   );
 
-  const message = buildShareMessage(product);
+  const getShareMessage = useCallback(async () => {
+    const link = await ensureShareLink();
+    return buildShareMessage(product, link || undefined);
+  }, [product, ensureShareLink]);
 
   const handleWhatsApp = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const success = await shareToWhatsApp(message);
+    const msg = await getShareMessage();
+    const success = await shareToWhatsApp(msg);
     if (success) handleShareComplete('whatsapp');
-  }, [message, handleShareComplete]);
+  }, [getShareMessage, handleShareComplete]);
 
   const handleWhatsAppStatus = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const success = await shareToWhatsAppStatus(message);
+    const msg = await getShareMessage();
+    const success = await shareToWhatsAppStatus(msg);
     if (success) handleShareComplete('whatsapp_status');
-  }, [message, handleShareComplete]);
+  }, [getShareMessage, handleShareComplete]);
 
   const handleCopyLink = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const link = await ensureShareLink();
+    if (link) {
+      // Copy the deep link directly
+      try {
+        const ClipboardModule = require('expo-clipboard');
+        if (ClipboardModule?.setStringAsync) {
+          await ClipboardModule.setStringAsync(link);
+          trackShare(product.slug, 'copy_link');
+          showToast('Link copied! +5 SVR tokens');
+          return;
+        }
+      } catch {}
+      try {
+        const { Clipboard: RNClipboard } = require('react-native');
+        if (RNClipboard?.setString) {
+          RNClipboard.setString(link);
+          trackShare(product.slug, 'copy_link');
+          showToast('Link copied! +5 SVR tokens');
+          return;
+        }
+      } catch {}
+    }
+    // Fallback to original copy behavior
     const success = await copyLinkToClipboard(product.slug);
     if (success) {
       trackShare(product.slug, 'copy_link');
       showToast('Link copied! +5 SVR tokens');
     }
-  }, [product.slug, showToast]);
+  }, [product.slug, showToast, ensureShareLink]);
 
   const handleSystemShare = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const success = await systemShare(message);
+    const msg = await getShareMessage();
+    const success = await systemShare(msg);
     if (success) handleShareComplete('system');
-  }, [message, handleShareComplete]);
+  }, [getShareMessage, handleShareComplete]);
 
   const savings =
     product.originalPrice && product.originalPrice > product.price
@@ -528,7 +589,7 @@ export default function ShareSheet({
               fontWeight="500"
               lineHeight={16}
             >
-              {message}
+              {buildShareMessage(product, shareLink || undefined)}
             </Text>
           </Animated.View>
         )}

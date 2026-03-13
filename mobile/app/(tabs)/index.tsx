@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Alert, StyleSheet, Dimensions, TextInput, Platform,
-  TouchableOpacity, Modal, Share,
+  TouchableOpacity, Modal, Share, Linking,
 } from 'react-native';
 import { YStack, XStack, Text, Spinner, ScrollView, View } from 'tamagui';
 import { Image as ExpoImage } from 'expo-image';
@@ -26,12 +26,17 @@ import { WishlistButton } from '../../components/WishlistButton';
 import ShareSheet from '../../components/ShareSheet';
 import { SkeletonSearchResults } from '../../components/SkeletonLoader';
 import { FlashDealBadge } from '../../components/DealTimer';
+import SmartSummaryHeader from '../../components/SmartSummaryHeader';
+import PriceComparisonStrip from '../../components/PriceComparisonStrip';
+import PriceHistoryChart from '../../components/PriceHistoryChart';
+import MiniSparkline from '../../components/MiniSparkline';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { storage, addRecentlyViewed, getRecentlyViewed, addSearchEntry, getTopSearchCategories, getRecentSearchQueries, RecentProduct } from '../../lib/storage';
 import { api } from '../../lib/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedBackground from '../../components/AnimatedBackground';
-import { COLORS, PLATFORM_BRANDS, CATEGORIES } from '../../constants/Theme';
+import { COLORS, GRADIENTS, PLATFORM_BRANDS, CATEGORIES } from '../../constants/Theme';
+import ErrorState from '../../components/ErrorState';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -79,9 +84,12 @@ function CategoryCard({ cat, index, onPress }: { cat: { label: string; icon: str
 // ─── Premium Trending Card (Large, Immersive) ──────────
 function TrendingCard({ item, index }: { item: any; index: number }) {
   const router = useRouter();
-  const discount = item.original_price_inr
-    ? Math.round(((item.original_price_inr - item.price_inr) / item.original_price_inr) * 100) : 0;
-  const saved = item.original_price_inr ? item.original_price_inr - item.price_inr : 0;
+  const price = item.price_inr ?? 0;
+  const originalPrice = item.original_price_inr ?? 0;
+  const discount = originalPrice > 0 && price > 0
+    ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+  const saved = originalPrice > price ? originalPrice - price : 0;
+  const platformColor = item.color || '#8B5CF6';
 
   const navigateToDetail = () => {
     const slug = (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80);
@@ -115,8 +123,8 @@ function TrendingCard({ item, index }: { item: any; index: number }) {
           )}
 
           {/* Platform badge */}
-          <View style={[st.trendPlatform, { borderColor: item.color + '40' }]}>
-            <View style={[st.platformDot, { backgroundColor: item.color }]} />
+          <View style={[st.trendPlatform, { borderColor: platformColor + '40' }]}>
+            <View style={[st.platformDot, { backgroundColor: platformColor }]} />
             <Text color="rgba(255,255,255,0.85)" fontSize={10} fontWeight="800">{item.platform}</Text>
           </View>
 
@@ -126,11 +134,11 @@ function TrendingCard({ item, index }: { item: any; index: number }) {
             <Text color="#F0F6FC" fontSize={18} fontWeight="900" letterSpacing={-0.5} numberOfLines={1}>{item.title}</Text>
             <XStack ai="center" gap="$2" mt={4}>
               <Text color="#3FB950" fontSize={24} fontWeight="900" letterSpacing={-1}>
-                ₹{item.price_inr.toLocaleString('en-IN')}
+                ₹{price.toLocaleString('en-IN')}
               </Text>
-              {item.original_price_inr && (
+              {originalPrice > price && (
                 <Text color="rgba(255,255,255,0.25)" fontSize={14} textDecorationLine="line-through">
-                  ₹{item.original_price_inr.toLocaleString('en-IN')}
+                  ₹{originalPrice.toLocaleString('en-IN')}
                 </Text>
               )}
               {saved > 0 && (
@@ -160,8 +168,10 @@ function TrendingCard({ item, index }: { item: any; index: number }) {
 // ─── For You Grid Card (Premium) ────────────────────────
 function ForYouCard({ item, index }: { item: any; index: number }) {
   const router = useRouter();
-  const discount = item.original_price_inr
-    ? Math.round(((item.original_price_inr - item.price_inr) / item.original_price_inr) * 100) : 0;
+  const price = item.price_inr ?? 0;
+  const originalPrice = item.original_price_inr ?? 0;
+  const discount = originalPrice > 0 && price > 0
+    ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
   const navigateToDetail = () => {
     const slug = (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80);
@@ -194,9 +204,9 @@ function ForYouCard({ item, index }: { item: any; index: number }) {
           <Text color="rgba(255,255,255,0.4)" fontSize={9} fontWeight="700" textTransform="uppercase" letterSpacing={0.5}>{item.platform}</Text>
           <Text color="#F0F6FC" fontSize={13} fontWeight="700" numberOfLines={1}>{item.title}</Text>
           <XStack ai="center" gap={6} mt={2}>
-            <Text color="#3FB950" fontSize={17} fontWeight="900" letterSpacing={-0.3}>₹{item.price_inr.toLocaleString('en-IN')}</Text>
-            {item.original_price_inr && (
-              <Text color="rgba(255,255,255,0.2)" fontSize={11} textDecorationLine="line-through">₹{item.original_price_inr.toLocaleString('en-IN')}</Text>
+            <Text color="#3FB950" fontSize={17} fontWeight="900" letterSpacing={-0.3}>₹{price.toLocaleString('en-IN')}</Text>
+            {originalPrice > price && (
+              <Text color="rgba(255,255,255,0.2)" fontSize={11} textDecorationLine="line-through">₹{originalPrice.toLocaleString('en-IN')}</Text>
             )}
           </XStack>
         </YStack>
@@ -205,19 +215,15 @@ function ForYouCard({ item, index }: { item: any; index: number }) {
   );
 }
 
-// ─── Hero Flash Deal ────────────────────────────────────
-function HeroDealBanner() {
+// ─── Hero Verified Deal (dynamic — no fake data) ────────
+function HeroDealBanner({ deal }: { deal: any | null }) {
   const pulse = useSharedValue(0);
-  const shimmer = useSharedValue(0);
 
   useEffect(() => {
     pulse.value = withRepeat(withSequence(
       withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
       withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
     ), -1, true);
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 3000, easing: Easing.linear }), -1, false
-    );
   }, []);
 
   const glowStyle = useAnimatedStyle(() => ({
@@ -229,6 +235,11 @@ function HeroDealBanner() {
     opacity: 0.4 + pulse.value * 0.6,
     transform: [{ scale: 0.8 + pulse.value * 0.4 }],
   }));
+
+  if (!deal) return null;
+
+  const dropPct = Math.round(deal.drop_percent || 0);
+  const avgPrice = deal.avg_30d_price || deal.price_inr;
 
   return (
     <Animated.View entering={FadeInUp.delay(200).duration(700)}>
@@ -245,49 +256,65 @@ function HeroDealBanner() {
         </View>
 
         <XStack p={20} gap={16} ai="center">
-          {/* Product image */}
-          <View style={st.heroImageWrap}>
-            <ExpoImage source={{ uri: 'https://m.media-amazon.com/images/I/61SUj2aKoEL._SX679_.jpg' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-            {/* Image shine */}
-            <LinearGradient
-              colors={['transparent', 'rgba(255,255,255,0.15)', 'transparent']}
-              style={[StyleSheet.absoluteFill, { transform: [{ rotate: '45deg' }] }]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            />
-          </View>
+          {deal.image_url ? (
+            <View style={st.heroImageWrap}>
+              <ExpoImage source={{ uri: deal.image_url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+              <LinearGradient
+                colors={['transparent', 'rgba(255,255,255,0.15)', 'transparent']}
+                style={[StyleSheet.absoluteFill, { transform: [{ rotate: '45deg' }] }]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              />
+            </View>
+          ) : (
+            <View style={[st.heroImageWrap, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(139,92,246,0.1)' }]}>
+              <MaterialCommunityIcons name="tag-check-outline" size={32} color="#A78BFA" />
+            </View>
+          )}
 
           <YStack f={1} gap={6}>
             <XStack ai="center" gap={8}>
               <Animated.View style={[st.liveDot, liveDotStyle]} />
-              <Text color="#A78BFA" fontSize={10} fontWeight="900" textTransform="uppercase" letterSpacing={1.5}>Flash Deal</Text>
-              <FlashDealBadge expiresAt={Math.floor(Date.now() / 1000) + 4 * 3600 + 32 * 60} compact />
+              <Text color="#A78BFA" fontSize={10} fontWeight="900" textTransform="uppercase" letterSpacing={1.5}>Verified Deal</Text>
+              {deal.trust_score != null && (
+                <View style={{ backgroundColor: 'rgba(63,185,80,0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text color="#3FB950" fontSize={9} fontWeight="800">{deal.trust_score}% Trust</Text>
+                </View>
+              )}
             </XStack>
 
-            <Text color="#F0F6FC" fontSize={16} fontWeight="900" numberOfLines={1} letterSpacing={-0.3}>
-              AirPods Pro (2nd Gen)
+            <Text color="#F0F6FC" fontSize={16} fontWeight="900" numberOfLines={2} letterSpacing={-0.3}>
+              {deal.title}
             </Text>
 
             <XStack ai="center" gap={8}>
-              <Text color="#3FB950" fontSize={26} fontWeight="900" letterSpacing={-1}>₹9,999</Text>
-              <Text color="rgba(255,255,255,0.2)" fontSize={14} textDecorationLine="line-through">₹24,900</Text>
+              <Text color="#3FB950" fontSize={26} fontWeight="900" letterSpacing={-1}>₹{Number(deal.price_inr).toLocaleString('en-IN')}</Text>
+              {avgPrice > deal.price_inr && (
+                <Text color="rgba(255,255,255,0.2)" fontSize={14} textDecorationLine="line-through">₹{Number(avgPrice).toLocaleString('en-IN')}</Text>
+              )}
             </XStack>
 
-            {/* Claim progress */}
-            <XStack ai="center" gap={8} mt={2}>
-              <View style={st.claimBar}>
-                <Animated.View style={[st.claimFill, { width: '78%' }]}>
-                  <LinearGradient colors={['#8B5CF6', '#6D28D9']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-                </Animated.View>
-              </View>
-              <Text color="rgba(255,255,255,0.35)" fontSize={10} fontWeight="700">78%</Text>
-            </XStack>
+            {/* Drop badge */}
+            {dropPct > 0 && (
+              <XStack ai="center" gap={6} mt={2}>
+                <View style={{ backgroundColor: 'rgba(63,185,80,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                  <Text color="#3FB950" fontSize={11} fontWeight="800">▼ {dropPct}% below avg</Text>
+                </View>
+                <Text color="rgba(255,255,255,0.25)" fontSize={10} fontWeight="600">{deal.platform}</Text>
+              </XStack>
+            )}
           </YStack>
         </XStack>
 
         {/* CTA */}
-        <TouchableOpacity activeOpacity={0.85} style={st.heroCTA}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={st.heroCTA}
+          onPress={() => {
+            if (deal.product_url) Linking.openURL(deal.product_url);
+          }}
+        >
           <LinearGradient colors={['#8B5CF6', '#6D28D9']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-          <Text color="#FFF" fontWeight="900" fontSize={14} letterSpacing={0.5}>CLAIM THIS DEAL</Text>
+          <Text color="#FFF" fontWeight="900" fontSize={14} letterSpacing={0.5}>VIEW DEAL</Text>
           <MaterialCommunityIcons name="arrow-right" size={16} color="#FFF" />
         </TouchableOpacity>
       </Animated.View>
@@ -324,8 +351,8 @@ function SectionTitle({ title, subtitle, icon, delay = 0, action }: {
 }
 
 // ─── Search Result Card (Premium) ───────────────────────
-function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onTap, onShare }: {
-  item: any; index: number; pushToken: string | null; priceStats?: any; onLongPress?: () => void; onTap?: (item: any) => void; onShare?: (item: any) => void;
+function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onTap, onShare, sparklineData }: {
+  item: any; index: number; pushToken: string | null; priceStats?: any; onLongPress?: () => void; onTap?: (item: any) => void; onShare?: (item: any) => void; sparklineData?: number[];
 }) {
   const addItem = useCartStore((state) => state.addItem);
   const router = useRouter();
@@ -339,6 +366,8 @@ function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onT
   const [aiPrediction, setAiPrediction] = useState<any>(null);
   const [isAlertSubscribed, setIsAlertSubscribed] = useState(false);
   const [isAlertSubscribing, setIsAlertSubscribing] = useState(false);
+  const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
+  const [alertTargetPrice, setAlertTargetPrice] = useState('');
 
   const slug = useMemo(() => (item.title || 'product').toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 80), [item.title]);
 
@@ -365,12 +394,27 @@ function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onT
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     addItem(item); setIsAdded(true); setTimeout(() => setIsAdded(false), 2000);
   };
-  const handleAlertMe = async () => {
-    if (!pushToken) { Alert.alert('Push Required', 'Enable push notifications for price alerts.'); return; }
+  const handleAlertMe = () => {
+    if (isAlertSubscribed) return;
+    // Pre-fill target price at 10% below current price
+    const suggestedPrice = Math.round(item.price_inr * 0.9);
+    setAlertTargetPrice(String(suggestedPrice));
+    setIsAlertModalVisible(true);
+  };
+  const handleSubmitAlert = async () => {
+    const target = parseFloat(alertTargetPrice);
+    if (!target || target <= 0) { Alert.alert('Invalid Price', 'Please enter a valid target price.'); return; }
     setIsAlertSubscribing(true);
+    setIsAlertModalVisible(false);
     try {
-      const res = await api.createAlert(item.title, item.price_inr, pushToken);
-      if (res.status === 'success') { setIsAlertSubscribed(true); }
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) { Alert.alert('Sign In', 'Please sign in to set price alerts.'); return; }
+      const res = await api.createAlert(userId, item.title, target, item.price_inr, item.platform);
+      if (res.status === 'success') {
+        setIsAlertSubscribed(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (e) { /* skip */ } finally { setIsAlertSubscribing(false); }
   };
   const handleSummarize = async () => {
@@ -429,6 +473,9 @@ function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onT
               <Text color="#F0F6FC" fontSize={15} fontWeight="800" numberOfLines={2} lineHeight={20}>{item.title || 'Untitled Product'}</Text>
               <XStack ai="center" gap={8} mt={2}>
                 <Text color="#3FB950" fontSize={22} fontWeight="900" letterSpacing={-0.5}>₹{item.price_inr?.toLocaleString('en-IN') || 'N/A'}</Text>
+                {sparklineData && sparklineData.length >= 2 && (
+                  <MiniSparkline prices={sparklineData} width={50} height={20} />
+                )}
                 {item.is_fake_sale && (
                   <View style={st.fakeSaleBadge}>
                     <MaterialCommunityIcons name="alert" size={10} color="#DC2626" />
@@ -514,6 +561,51 @@ function SearchResultCard({ item, index, pushToken, priceStats, onLongPress, onT
       <ARTryOnModal visible={isArVisible} onClose={() => setIsArVisible(false)} imageUrl={item.image_url} productTitle={item.title} />
       <ProductViewer360 visible={isViewerOpen} onClose={() => setIsViewerOpen(false)} images={item.image_url ? [item.image_url] : []} title={item.title || 'Product'} price={item.price_inr} platform={item.platform} url={item.product_url} onARPress={() => { setIsViewerOpen(false); setTimeout(() => setIsArVisible(true), 300); }} />
       <GroupDealSheet visible={isGroupDealVisible} onClose={() => setIsGroupDealVisible(false)} product={item} />
+
+      {/* Price Alert Modal */}
+      <Modal visible={isAlertModalVisible} transparent animationType="slide" onRequestClose={() => setIsAlertModalVisible(false)}>
+        <TouchableOpacity style={st.alertOverlay} activeOpacity={1} onPress={() => setIsAlertModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={st.alertSheet}>
+            <View style={st.alertSheetHandle} />
+            <XStack ai="center" gap={10} mb={16}>
+              <View style={st.alertSheetIcon}>
+                <MaterialCommunityIcons name="bell-ring-outline" size={22} color={COLORS.accentOrange} />
+              </View>
+              <YStack f={1}>
+                <Text color={COLORS.textPrimary} fontSize={16} fontWeight="900">Set Price Alert</Text>
+                <Text color={COLORS.textTertiary} fontSize={12} numberOfLines={1} mt={2}>{item.title}</Text>
+              </YStack>
+            </XStack>
+
+            <YStack gap={6} mb={16}>
+              <Text color={COLORS.textSecondary} fontSize={11} fontWeight="700" textTransform="uppercase">Current Price</Text>
+              <Text color={COLORS.priceGreen} fontSize={22} fontWeight="900">₹{item.price_inr?.toLocaleString('en-IN')}</Text>
+            </YStack>
+
+            <YStack gap={8} mb={20}>
+              <Text color={COLORS.textSecondary} fontSize={11} fontWeight="700" textTransform="uppercase">Alert me when price drops to</Text>
+              <XStack ai="center" gap={8}>
+                <Text color={COLORS.textPrimary} fontSize={20} fontWeight="900">₹</Text>
+                <TextInput
+                  style={st.alertPriceInput}
+                  value={alertTargetPrice}
+                  onChangeText={setAlertTargetPrice}
+                  keyboardType="numeric"
+                  placeholder="Target price"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  selectionColor={COLORS.brandPurple}
+                />
+              </XStack>
+            </YStack>
+
+            <TouchableOpacity style={st.alertSubmitBtn} activeOpacity={0.85} onPress={handleSubmitAlert}>
+              <LinearGradient colors={GRADIENTS.brandPrimary as any} style={StyleSheet.absoluteFill} />
+              <MaterialCommunityIcons name="bell-check" size={18} color="#FFF" />
+              <Text color="#FFF" fontSize={15} fontWeight="800" ml={8}>Set Alert</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </Animated.View>
   );
 }
@@ -968,15 +1060,27 @@ export default function SearchScreen() {
   const [quickActionsItem, setQuickActionsItem] = useState<any>(null);
   const [shareItem, setShareItem] = useState<any>(null);
 
+  // Price history & prediction for chart
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
+  const [pricePrediction, setPricePrediction] = useState<any>(null);
+  const [historyDays, setHistoryDays] = useState(30);
+
   const [trendingDeals, setTrendingDeals] = useState<any[]>(() => {
-    const cached = storage.getString('cachedTrendingDeals');
-    return cached ? JSON.parse(cached) : [];
+    try {
+      const cached = storage.getString('cachedTrendingDeals');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
   });
   const [forYouDeals, setForYouDeals] = useState<any[]>(() => {
-    const cached = storage.getString('cachedForYouDeals');
-    return cached ? JSON.parse(cached) : [];
+    try {
+      const cached = storage.getString('cachedForYouDeals');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
   });
+  const [heroDeal, setHeroDeal] = useState<any>(null);
   const [isLoadingDeals, setIsLoadingDeals] = useState(!storage.getString('cachedTrendingDeals'));
+  const [trendingError, setTrendingError] = useState(false);
+  const [forYouError, setForYouError] = useState(false);
 
   // Search bar glow animation
   const searchGlow = useSharedValue(0);
@@ -1000,15 +1104,30 @@ export default function SearchScreen() {
     }
   }, [params.sharedQuery]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [tR, fR] = await Promise.all([api.trendingDeals(), api.forYouDeals()]);
-        if (tR.status === 'success' && tR.data?.length > 0) { setTrendingDeals(tR.data); storage.set('cachedTrendingDeals', JSON.stringify(tR.data)); }
-        if (fR.status === 'success' && fR.data?.length > 0) { setForYouDeals(fR.data); storage.set('cachedForYouDeals', JSON.stringify(fR.data)); }
-      } catch (e) { /* backend down */ } finally { setIsLoadingDeals(false); }
-    })();
+  const loadHomeDeals = useCallback(async () => {
+    setIsLoadingDeals(true);
+    setTrendingError(false);
+    setForYouError(false);
+    try {
+      const [tR, fR, heroR] = await Promise.all([
+        api.trendingDeals(),
+        api.forYouDeals(),
+        api.todaysDeals(),
+      ]);
+      if (tR.status === 'success' && tR.data?.length > 0) { setTrendingDeals(tR.data); storage.set('cachedTrendingDeals', JSON.stringify(tR.data)); }
+      else { setTrendingError(true); }
+      if (fR.status === 'success' && fR.data?.length > 0) { setForYouDeals(fR.data); storage.set('cachedForYouDeals', JSON.stringify(fR.data)); }
+      else { setForYouError(true); }
+      // Hero: show top verified deal (or null — no fake data)
+      if (heroR.status === 'success' && heroR.data?.length > 0) { setHeroDeal(heroR.data[0]); }
+      else { setHeroDeal(null); }
+    } catch (e) {
+      setTrendingError(true);
+      setForYouError(true);
+    } finally { setIsLoadingDeals(false); }
   }, []);
+
+  useEffect(() => { loadHomeDeals(); }, []);
 
   useEffect(() => {
     if (!activeTaskId || !isLoadingTask) return;
@@ -1042,7 +1161,13 @@ export default function SearchScreen() {
     setProductSuggestions([]); setSmartData(null); setIsSmartLoading(true);
     setActiveSort('relevance'); setActivePlatforms([]); setActivePriceRange(null);
     setResultsSummary(null);
+    setPriceHistory([]); setPricePrediction(null);
     addRecentSearch(q);
+
+    // Fire-and-forget analytics tracking
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) api.trackEvent(session.user.id, 'search', q).catch(() => {});
+    }).catch(() => {});
 
     const isBarcode = /^\d+(-\d+)*$/.test(q);
 
@@ -1103,6 +1228,14 @@ export default function SearchScreen() {
                 if (res.status === 'success' && res.data) {
                   setResultsSummary(res.data);
                 }
+              }).catch(() => {});
+
+              // Fetch price history & prediction for charts (fire-and-forget)
+              api.priceHistory(q).then(res => {
+                if (res.status === 'success') setPriceHistory(res.data?.history || []);
+              }).catch(() => {});
+              api.priceForecast(q, minPrice, bestItem?.platform || platforms[0]).then(res => {
+                if (res.status === 'success') setPricePrediction(res.data?.prediction || null);
               }).catch(() => {});
             }
           }
@@ -1221,10 +1354,14 @@ export default function SearchScreen() {
   const quickActions = useMemo(() => {
     if (!quickActionsItem) return [];
     return [
-      { id: 'alert', label: 'Price Alert', icon: 'bell-ring-outline', color: '#D97706', onPress: () => {
-        if (!expoPushToken) { Alert.alert('Push Required', 'Enable notifications for price alerts.'); return; }
-        api.createAlert(quickActionsItem.title, quickActionsItem.price_inr, expoPushToken).catch(() => {});
-        Alert.alert('Alert Set', 'You\'ll be notified when the price drops.');
+      { id: 'alert', label: 'Price Alert', icon: 'bell-ring-outline', color: '#D97706', onPress: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (!userId) { Alert.alert('Sign In', 'Please sign in to set price alerts.'); return; }
+        const target = Math.round(quickActionsItem.price_inr * 0.9);
+        api.createAlert(userId, quickActionsItem.title, target, quickActionsItem.price_inr, quickActionsItem.platform).catch(() => {});
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Alert Set', `You'll be notified when the price drops below ₹${target.toLocaleString('en-IN')}.`);
       }},
       { id: 'cart', label: 'Add to Cart', icon: 'cart-plus', color: '#3B82F6', onPress: () => {
         useCartStore.getState().addItem(quickActionsItem);
@@ -1252,7 +1389,35 @@ export default function SearchScreen() {
       platform: item.platform,
       slug,
     });
+
+    // Fire-and-forget analytics tracking
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) {
+        api.trackEvent(session.user.id, 'click_product', item.title, item.platform, {
+          price_inr: item.price_inr,
+          slug,
+        }).catch(() => {});
+      }
+    }).catch(() => {});
   }, []);
+
+  // Derive sparkline data per platform from price history (last 7 unique dates)
+  const sparklineByPlatform = useMemo(() => {
+    if (priceHistory.length === 0) return new Map<string, number[]>();
+    const map = new Map<string, { date: string; price: number }[]>();
+    for (const pt of priceHistory) {
+      const arr = map.get(pt.platform) || [];
+      arr.push({ date: pt.date, price: pt.price_inr });
+      map.set(pt.platform, arr);
+    }
+    const result = new Map<string, number[]>();
+    for (const [platform, pts] of map) {
+      const sorted = pts.sort((a, b) => a.date.localeCompare(b.date));
+      const last7 = sorted.slice(-7).map(p => p.price);
+      if (last7.length >= 2) result.set(platform, last7);
+    }
+    return result;
+  }, [priceHistory]);
 
   const hasResults = searchResults.length > 0;
   const hasSuggestions = productSuggestions.length > 0;
@@ -1404,13 +1569,20 @@ export default function SearchScreen() {
               <>
                 <SectionTitle title="Results" subtitle={`${searchResults.length} of ${allResults.length} products`} icon="text-search" />
 
-                {/* AI Summary Banner */}
+                {/* AI Smart Summary */}
                 {resultsSummary && (
-                  <SearchSummaryBanner
-                    summary={resultsSummary.summary}
-                    buySignal={resultsSummary.buySignal}
-                    buySignalReason={resultsSummary.buySignalReason}
-                  />
+                  <View style={{ marginBottom: 16 }}>
+                    <SmartSummaryHeader
+                      summary={resultsSummary.summary}
+                      buySignal={resultsSummary.buySignal}
+                      buySignalReason={resultsSummary.buySignalReason}
+                      bestPrice={priceStats?.all_time_low_price}
+                      bestPlatform={searchResults[0]?.platform}
+                      averagePrice={priceStats?.average_price}
+                      platformCount={resultPlatforms.length}
+                      prediction={pricePrediction}
+                    />
+                  </View>
                 )}
 
                 {/* Filter & Sort Bar */}
@@ -1425,19 +1597,37 @@ export default function SearchScreen() {
                   platforms={resultPlatforms}
                 />
 
-                {priceStats && <PriceStatsBanner stats={priceStats} />}
+                {/* Price Comparison Strip (replaces old ComparisonCards + PriceStatsBanner) */}
+                {searchResults.length >= 2 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <PriceComparisonStrip
+                      items={searchResults.map(r => ({
+                        platform: r.platform || 'Unknown',
+                        price_inr: r.price_inr || 0,
+                        original_price_inr: r.original_price_inr,
+                        product_url: r.product_url,
+                        trust_score: r.trust_score,
+                        trust_label: r.trust_label,
+                        is_verified_deal: r.is_verified_deal,
+                      }))}
+                      onPlatformPress={(item) => {
+                        if (item.product_url) Linking.openURL(item.product_url);
+                      }}
+                    />
+                  </View>
+                )}
 
-                {/* Comparison Cards (grouped by product) */}
-                {comparisonGroups.length > 0 && (
-                  <YStack mb={8}>
-                    <XStack ai="center" gap={6} mb={10}>
-                      <MaterialCommunityIcons name="compare-horizontal" size={14} color={COLORS.brandBlue} />
-                      <Text color={COLORS.textTertiary} fontSize={11} fontWeight="800" textTransform="uppercase">Price Comparison</Text>
-                    </XStack>
-                    {comparisonGroups.map((group, i) => (
-                      <ComparisonCard key={i} group={group} onPress={(item) => { handleProductTap(item); }} />
-                    ))}
-                  </YStack>
+                {/* Price History Chart */}
+                {(priceHistory.length > 0 || searchResults.length > 0) && (
+                  <View style={{ marginBottom: 16 }}>
+                    <PriceHistoryChart
+                      history={priceHistory}
+                      prediction={pricePrediction}
+                      lowestEver={priceStats?.all_time_low_price}
+                      activeDays={historyDays}
+                      onDaysChange={setHistoryDays}
+                    />
+                  </View>
                 )}
 
                 {/* No results after filtering */}
@@ -1458,6 +1648,7 @@ export default function SearchScreen() {
                     index={i}
                     pushToken={expoPushToken}
                     priceStats={priceStats}
+                    sparklineData={sparklineByPlatform.get(item.platform)}
                     onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); setQuickActionsItem(item); }}
                     onTap={handleProductTap}
                     onShare={(itm) => setShareItem(itm)}
@@ -1494,10 +1685,12 @@ export default function SearchScreen() {
               <QuickStats />
             </View>
 
-            {/* Hero Deal */}
-            <YStack px={24} mt={8}>
-              <HeroDealBanner />
-            </YStack>
+            {/* Hero Deal — only shows real verified deals, never fake data */}
+            {heroDeal && (
+              <YStack px={24} mt={8}>
+                <HeroDealBanner deal={heroDeal} />
+              </YStack>
+            )}
 
             {/* Trending Section */}
             <YStack mt={28}>
@@ -1512,6 +1705,10 @@ export default function SearchScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} decelerationRate="fast" snapToInterval={SW * 0.78 + 16} snapToAlignment="start">
                   {trendingDeals.map((deal, i) => <TrendingCard key={deal.id || i} item={deal} index={i} />)}
                 </ScrollView>
+              ) : trendingError ? (
+                <YStack px={24}>
+                  <ErrorState message="Couldn't load trending deals" onRetry={loadHomeDeals} compact />
+                </YStack>
               ) : (
                 <YStack ai="center" py={24} px={24}>
                   <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,123,0,0.08)', justifyContent: 'center', alignItems: 'center' }}>
@@ -1530,6 +1727,8 @@ export default function SearchScreen() {
                 <XStack flexWrap="wrap" jc="space-between">
                   {forYouDeals.map((deal, i) => <ForYouCard key={deal.id || i} item={deal} index={i} />)}
                 </XStack>
+              ) : forYouError ? (
+                <ErrorState message="Couldn't load recommendations" onRetry={loadHomeDeals} compact />
               ) : (
                 <YStack ai="center" py={20}>
                   <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(139,92,246,0.08)', justifyContent: 'center', alignItems: 'center' }}>
@@ -1903,5 +2102,35 @@ const st = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  // Price Alert Modal
+  alertOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  alertSheet: {
+    backgroundColor: '#0D1117', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  alertSheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignSelf: 'center', marginBottom: 20,
+  },
+  alertSheetIcon: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: 'rgba(217,119,6,0.12)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  alertPriceInput: {
+    flex: 1, fontSize: 22, fontWeight: '900' as const,
+    color: '#F0F6FC', paddingVertical: 12, paddingHorizontal: 16,
+    borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  alertSubmitBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 16, borderRadius: 16, overflow: 'hidden',
   },
 });

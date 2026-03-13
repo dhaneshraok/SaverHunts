@@ -20,14 +20,20 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from app.utils.rate_limiter import rate_limit
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit(120))])
+
+
+def _sanitize_like(value: str) -> str:
+    """Escape LIKE/ILIKE wildcards to prevent injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 # ---------------------------------------------------------------------------
 # Supabase client
@@ -74,8 +80,10 @@ class ShareCardRequest(BaseModel):
     best_platform: Optional[str] = None
 
 
+MAX_IMAGE_BASE64_LEN = 15_000_000  # ~10MB decoded
+
 class VisualSearchRequest(BaseModel):
-    image_base64: str
+    image_base64: str  # validated in endpoint
 
 
 class ResultsSummaryRequest(BaseModel):
@@ -313,7 +321,7 @@ def _get_price_range_chips(category: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # POST /search/smart — AI-powered query understanding
 # ---------------------------------------------------------------------------
-@router.post("/search/smart")
+@router.post("/search/smart", dependencies=[Depends(rate_limit(30))])
 async def smart_search(body: SmartSearchRequest, request: Request):
     """
     Parse a raw search query into structured intent using Gemini AI.
@@ -474,7 +482,7 @@ async def search_suggest(
         try:
             result = supabase_client.table("popular_searches") \
                 .select("query, category, search_count") \
-                .ilike("query", f"{q}%") \
+                .ilike("query", f"{_sanitize_like(q)}%") \
                 .order("search_count", desc=True) \
                 .limit(limit) \
                 .execute()
@@ -493,7 +501,7 @@ async def search_suggest(
         try:
             result = supabase_client.table("community_deals") \
                 .select("title, category") \
-                .ilike("title", f"%{q}%") \
+                .ilike("title", f"%{_sanitize_like(q)}%") \
                 .order("upvotes", desc=True) \
                 .limit(limit - len(suggestions)) \
                 .execute()
@@ -544,7 +552,7 @@ async def trending_searches(
 # ---------------------------------------------------------------------------
 # POST /search/visual — Visual search using Gemini Vision
 # ---------------------------------------------------------------------------
-@router.post("/search/visual")
+@router.post("/search/visual", dependencies=[Depends(rate_limit(30))])
 async def visual_search(body: VisualSearchRequest, request: Request):
     """
     Accept a base64-encoded image, use Gemini Vision to identify the product,
@@ -552,6 +560,8 @@ async def visual_search(body: VisualSearchRequest, request: Request):
     """
     if not body.image_base64:
         return {"status": "error", "error": "No image provided"}
+    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
+        return {"status": "error", "error": "Image too large (max ~10MB)"}
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -710,7 +720,7 @@ async def get_product_prices(
         try:
             result = supabase_client.table("search_results") \
                 .select("*") \
-                .ilike("product_title", f"%{product_id.replace('-', ' ')}%") \
+                .ilike("product_title", f"%{_sanitize_like(product_id.replace('-', ' '))}%") \
                 .order("price_inr", desc=False) \
                 .limit(20) \
                 .execute()
@@ -770,7 +780,7 @@ async def get_price_history(
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             result = supabase_client.table("price_history") \
                 .select("platform, price_inr, recorded_at") \
-                .ilike("query", f"%{product_id.replace('-', ' ')}%") \
+                .ilike("query", f"%{_sanitize_like(product_id.replace('-', ' '))}%") \
                 .gte("recorded_at", cutoff) \
                 .order("recorded_at", desc=False) \
                 .limit(500) \
@@ -843,7 +853,7 @@ async def get_price_prediction(
                 try:
                     res = supabase_client.table("price_history") \
                         .select("price_inr, recorded_at, platform") \
-                        .ilike("query", f"%{product_id.replace('-', ' ')}%") \
+                        .ilike("query", f"%{_sanitize_like(product_id.replace('-', ' '))}%") \
                         .order("recorded_at", desc=True) \
                         .limit(30) \
                         .execute()
@@ -1013,7 +1023,7 @@ async def check_fake_sale(
             cutoff = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
             result = supabase_client.table("price_history") \
                 .select("price_inr, recorded_at, platform") \
-                .ilike("query", f"%{body.product_id.replace('-', ' ')}%") \
+                .ilike("query", f"%{_sanitize_like(body.product_id.replace('-', ' '))}%") \
                 .gte("recorded_at", cutoff) \
                 .order("recorded_at", desc=False) \
                 .limit(200) \

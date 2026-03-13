@@ -12,3 +12,6 @@ import os
 engine_dir = os.path.join(os.path.dirname(__file__), "..")
 if engine_dir not in sys.path:
     sys.path.insert(0, os.path.abspath(engine_dir))
+
+# Set test JWT secret before any app code loads
+os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-for-unit-tests-only"

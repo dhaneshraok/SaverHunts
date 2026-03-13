@@ -150,7 +150,8 @@ async def _search_flipkart_api(query: str) -> list[dict]:
         logger.info("Flipkart Affiliate credentials not configured, skipping.")
         return []
 
-    url = f"https://affiliate-api.flipkart.net/affiliate/1.0/search.json?query={query}&resultCount=5"
+    from urllib.parse import quote
+    url = f"https://affiliate-api.flipkart.net/affiliate/1.0/search.json?query={quote(query)}&resultCount=5"
     headers = {
         "Fk-Affiliate-Id": FLIPKART_AFFILIATE_ID,
         "Fk-Affiliate-Token": FLIPKART_AFFILIATE_TOKEN,
@@ -342,7 +343,7 @@ async def _scrape_all_sources(query: str) -> list[dict]:
 
 # ─── Price Stats Calculator ──────────────────────────────
 def _calculate_price_stats(query: str, current_products: list[dict]) -> dict | None:
-    if not supabase_client:
+    if not supabase_client or not current_products:
         return None
 
     try:
@@ -352,17 +353,25 @@ def _calculate_price_stats(query: str, current_products: list[dict]) -> dict | N
         all_prices = history + [
             {
                 "price_inr": p["price_inr"],
-                "platform": p["platform"],
+                "platform": p.get("platform", "Unknown"),
                 "recorded_at": _now_iso(),
-            } for p in current_products
+            } for p in current_products if p.get("price_inr")
         ]
 
         if not all_prices:
             return None
 
-        all_time_low = min(all_prices, key=lambda x: x["price_inr"])
-        avg_price = sum(x["price_inr"] for x in all_prices) / len(all_prices)
-        current_best = min(current_products, key=lambda x: x["price_inr"])["price_inr"]
+        # Filter out invalid prices (zero, negative, non-numeric)
+        valid_prices = [x for x in all_prices if isinstance(x.get("price_inr"), (int, float)) and x["price_inr"] > 0]
+        if not valid_prices:
+            return None
+
+        all_time_low = min(valid_prices, key=lambda x: x["price_inr"])
+        avg_price = sum(x["price_inr"] for x in valid_prices) / len(valid_prices)
+        valid_current = [p for p in current_products if p.get("price_inr") and p["price_inr"] > 0]
+        if not valid_current:
+            return None
+        current_best = min(valid_current, key=lambda x: x["price_inr"])["price_inr"]
 
         if current_best <= all_time_low["price_inr"] * 1.02:
             trend = "dropping"
@@ -387,7 +396,8 @@ def _calculate_price_stats(query: str, current_products: list[dict]) -> dict | N
 
 # ─── Response Builder ────────────────────────────────────
 def _build_search_response(query: str, products: list[dict], price_stats: dict | None) -> dict:
-    products.sort(key=lambda p: p["price_inr"])
+    from services.deal_scorer import rank_products
+    products = rank_products(products, query)
 
     best_price_info = None
     if products:

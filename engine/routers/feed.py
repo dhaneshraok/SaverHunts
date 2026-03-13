@@ -1,10 +1,11 @@
 import os
 import logging
 import random
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from app.utils.rate_limiter import rate_limit
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -40,8 +41,8 @@ def _inject_ads(deals: list, ad_interval: int = 3) -> list:
     return final
 
 
-@router.get("/personalized/{user_id}")
-async def get_personalized_feed(user_id: str, page: int = 0):
+@router.get("/personalized/{user_id}", dependencies=[Depends(rate_limit(120))])
+async def get_personalized_feed(user_id: str, page: int = Query(0, ge=0, le=1000)):
     """
     Personalized feed from community_deals, ranked by engagement score.
     Injects native sponsored ads every 3rd position for monetization.
@@ -75,4 +76,7 @@ async def get_personalized_feed(user_id: str, page: int = 0):
         return {"status": "success", "data": [], "page": page}
     except Exception as e:
         logger.error(f"Feed query error: {e}")
-        return {"status": "success", "data": [], "page": page}
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "error": "Failed to load feed", "data": [], "page": page},
+        )

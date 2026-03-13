@@ -1,9 +1,10 @@
 import os
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from app.utils.rate_limiter import rate_limit
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ if SUPABASE_URL and SUPABASE_KEY:
         logger.error(f"Supabase init failed in leaderboard: {e}")
 
 
-@router.get("/global")
+@router.get("/global", dependencies=[Depends(rate_limit(120))])
 async def get_global_leaderboard():
     """
     Returns top curators ranked by saver tokens.

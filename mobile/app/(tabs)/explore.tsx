@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { COLORS, PLATFORM_BRANDS } from '../../constants/Theme';
 import { api } from '../../lib/api';
 import AnimatedBackground from '../../components/AnimatedBackground';
+import ErrorState from '../../components/ErrorState';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -224,6 +225,8 @@ export default function ExploreScreen() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [groupBuys, setGroupBuys] = useState<GroupBuy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dealsError, setDealsError] = useState(false);
+  const [groupBuysError, setGroupBuysError] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -234,6 +237,8 @@ export default function ExploreScreen() {
 
   const loadData = async () => {
     setLoading(true);
+    setDealsError(false);
+    setGroupBuysError(false);
     try {
       const [dealsRes, groupRes] = await Promise.all([
         api.communityDeals(),
@@ -242,12 +247,19 @@ export default function ExploreScreen() {
       if (dealsRes.status === 'success' && dealsRes.data) {
         const d = Array.isArray(dealsRes.data) ? dealsRes.data : (dealsRes.data.deals || []);
         setDeals(d);
+      } else {
+        setDealsError(true);
       }
       if (groupRes.status === 'success' && groupRes.data) {
         const g = Array.isArray(groupRes.data) ? groupRes.data : (groupRes.data.group_buys || []);
         setGroupBuys(g);
+      } else {
+        setGroupBuysError(true);
       }
-    } catch (e) { /* backend down */ }
+    } catch (e) {
+      setDealsError(true);
+      setGroupBuysError(true);
+    }
     setLoading(false);
   };
 
@@ -268,7 +280,7 @@ export default function ExploreScreen() {
               <Text color={COLORS.textTertiary} fontSize={12} fontWeight="500">Curated deals from the community</Text>
             </YStack>
             <XStack gap={8}>
-              <TouchableOpacity style={st.headerBtn} onPress={() => router.push('/(tabs)/feed' as any)}>
+              <TouchableOpacity style={st.headerBtn} onPress={() => router.push('/feed' as any)}>
                 <MaterialCommunityIcons name="play-box-outline" size={20} color="#FF7B00" />
               </TouchableOpacity>
               <TouchableOpacity style={st.headerBtn}>
@@ -301,11 +313,17 @@ export default function ExploreScreen() {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20 }}
           renderItem={({ item, index }) => <GroupBuyCard item={item} index={index} />}
           ListEmptyComponent={
-            <YStack f={1} ai="center" jc="center" py={60}>
-              <MaterialCommunityIcons name="account-group-outline" size={48} color="rgba(255,255,255,0.1)" />
-              <Text color={COLORS.textTertiary} fontSize={14} mt={12}>No group buys yet</Text>
-              <Text color={COLORS.textMuted} fontSize={12} mt={4}>Start one from any search result!</Text>
-            </YStack>
+            groupBuysError ? (
+              <YStack px={24} py={20} width={SW - 48}>
+                <ErrorState message="Couldn't load group buys" onRetry={loadData} compact />
+              </YStack>
+            ) : (
+              <YStack f={1} ai="center" jc="center" py={60}>
+                <MaterialCommunityIcons name="account-group-outline" size={48} color="rgba(255,255,255,0.1)" />
+                <Text color={COLORS.textTertiary} fontSize={14} mt={12}>No group buys yet</Text>
+                <Text color={COLORS.textMuted} fontSize={12} mt={4}>Start one from any search result!</Text>
+              </YStack>
+            )
           }
         />
       ) : (
@@ -317,11 +335,17 @@ export default function ExploreScreen() {
           renderItem={renderDeal}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <YStack ai="center" jc="center" py={60}>
-              <MaterialCommunityIcons name="fire" size={48} color="rgba(255,255,255,0.1)" />
-              <Text color={COLORS.textTertiary} fontSize={14} mt={12}>No deals yet</Text>
-              <Text color={COLORS.textMuted} fontSize={12} mt={4}>Share a deal from your search results!</Text>
-            </YStack>
+            dealsError ? (
+              <YStack px={24} py={20}>
+                <ErrorState message="Couldn't load deals" onRetry={loadData} compact />
+              </YStack>
+            ) : (
+              <YStack ai="center" jc="center" py={60}>
+                <MaterialCommunityIcons name="fire" size={48} color="rgba(255,255,255,0.1)" />
+                <Text color={COLORS.textTertiary} fontSize={14} mt={12}>No deals yet</Text>
+                <Text color={COLORS.textMuted} fontSize={12} mt={4}>Share a deal from your search results!</Text>
+              </YStack>
+            )
           }
         />
       )}

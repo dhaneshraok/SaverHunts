@@ -4,7 +4,7 @@ import { YStack, XStack, Text, View } from 'tamagui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { storage } from '../lib/storage';
+import { storage, userKey } from '../lib/storage';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -74,6 +74,15 @@ const SLIDES = [
         iconName: 'chart-timeline-variant-shimmer' as const,
     },
     {
+        id: 'trust',
+        title: 'Trust Scores\nOn Every Deal',
+        subtitle: 'FAKE SALE DETECTOR',
+        description: 'We analyze 30-day price history to verify deals are real — not inflated-then-discounted tricks. Look for the green "Verified Deal" badge.',
+        accentColor: '#3FB950',
+        bgColor: '#071A0E',
+        iconName: 'shield-check' as const,
+    },
+    {
         id: 'setup',
         title: 'Personalize\nYour Hunt',
         subtitle: 'QUICK SETUP',
@@ -116,7 +125,8 @@ function PhoneMockup({ slide, index }: { slide: typeof SLIDES[0]; index: number 
                     {index === 2 && <ReelsScreen color={slide.accentColor} />}
                     {index === 3 && <GroupDealScreen color={slide.accentColor} />}
                     {index === 4 && <PredictScreen color={slide.accentColor} />}
-                    {index === 5 && <SetupScreen color={slide.accentColor} />}
+                    {index === 5 && <TrustScoreScreen color={slide.accentColor} />}
+                    {index === 6 && <SetupScreen color={slide.accentColor} />}
                 </View>
                 <View style={styles.phoneBottomBar}>
                     <View style={styles.phoneHomeIndicator} />
@@ -356,6 +366,50 @@ function PredictScreen({ color }: { color: string }) {
     );
 }
 
+function TrustScoreScreen({ color }: { color: string }) {
+    const deals = [
+        { title: 'MacBook Air M3', current: '₹94,990', avg: '₹1,02,000', score: 92, label: 'Verified Deal', labelColor: '#3FB950', icon: 'shield-check' },
+        { title: 'Nike Air Max', current: '₹8,495', avg: '₹7,200', score: 25, label: 'Fake Sale', labelColor: '#F87171', icon: 'alert-circle' },
+        { title: 'Sony WH-1000XM5', current: '₹22,990', avg: '₹24,500', score: 68, label: 'Good Price', labelColor: '#38BDF8', icon: 'check-circle' },
+    ];
+    return (
+        <YStack gap={6}>
+            <XStack ai="center" jc="space-between" mb={2}>
+                <Text color="#FFF" fontSize={10} fontWeight="800">Deal Verification</Text>
+                <View style={{ backgroundColor: color + '20', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                    <Text color={color} fontSize={6} fontWeight="800">AI POWERED</Text>
+                </View>
+            </XStack>
+            {deals.map((deal, i) => (
+                <View key={i} style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 6, borderWidth: 1, borderColor: deal.labelColor + '20' }}>
+                    <XStack ai="center" jc="space-between">
+                        <YStack f={1} gap={2}>
+                            <Text color="#FFF" fontSize={8} fontWeight="700">{deal.title}</Text>
+                            <XStack ai="center" gap={3}>
+                                <Text color="#FFF" fontSize={9} fontWeight="900">{deal.current}</Text>
+                                <Text color="rgba(255,255,255,0.3)" fontSize={7}>avg {deal.avg}</Text>
+                            </XStack>
+                        </YStack>
+                        <YStack ai="flex-end" gap={1}>
+                            <View style={{ backgroundColor: deal.labelColor + '18', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                                <MaterialCommunityIcons name={deal.icon as any} size={7} color={deal.labelColor} />
+                                <Text color={deal.labelColor} fontSize={6} fontWeight="800">{deal.label}</Text>
+                            </View>
+                            <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                                <View style={{ width: `${deal.score}%`, height: 3, borderRadius: 2, backgroundColor: deal.labelColor }} />
+                            </View>
+                        </YStack>
+                    </XStack>
+                </View>
+            ))}
+            <View style={[ms.aiBadge, { borderColor: color + '30', backgroundColor: color + '10' }]}>
+                <MaterialCommunityIcons name="shield-check" size={9} color={color} />
+                <Text color={color} fontSize={7} fontWeight="800" ml="$1">30-day price history verified</Text>
+            </View>
+        </YStack>
+    );
+}
+
 function SetupScreen({ color }: { color: string }) {
     return (
         <YStack f={1} jc="center" ai="center" gap={8}>
@@ -431,7 +485,7 @@ export default function OnboardingScreen() {
     const completeOnboarding = useCallback(() => {
         try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
         if (selectedCategories.length > 0) {
-            storage.set('onboardingCategories', JSON.stringify(selectedCategories));
+            storage.set(userKey('onboardingCategories'), JSON.stringify(selectedCategories));
         }
         storage.set('has_seen_onboarding', true);
 
@@ -512,7 +566,7 @@ export default function OnboardingScreen() {
     const currentSlide = SLIDES[currentIndex];
     const ctaColors = isLast ? ['#8B5CF6', '#7C3AED'] : [currentSlide.accentColor, currentSlide.accentColor + 'CC'];
     const ctaLabel = isLast
-        ? (selectedCategories.length > 0 ? `Start Hunting (${selectedCategories.length} selected)` : 'Start Hunting')
+        ? (selectedCategories.length > 0 ? `Start Your First Search (${selectedCategories.length} picked)` : 'Start Your First Search')
         : currentIndex === 0 ? 'Get Started' : 'Next';
 
     return (

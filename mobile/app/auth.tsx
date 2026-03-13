@@ -210,7 +210,7 @@ export default function AuthScreen() {
         setLoading(true);
         try {
             const { error } = await supabase.auth.signInWithPassword({ email: e, password });
-            if (error) { showAlert('Login Failed', error.message); }
+            if (error) { showAlert('Login Failed', error?.message || 'Authentication failed'); }
             else { try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {} }
         } catch (err: any) { showAlert('Error', err.message || 'Network error'); }
         setLoading(false);
@@ -224,7 +224,7 @@ export default function AuthScreen() {
         setLoading(true);
         try {
             const { data: { session }, error } = await supabase.auth.signUp({ email: e, password });
-            if (error) { showAlert('Signup Failed', error.message); }
+            if (error) { showAlert('Signup Failed', error?.message || 'Signup failed'); }
             else if (!session) { showAlert('Check Email', 'Verification link sent!'); }
             else { try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {} }
         } catch (err: any) { showAlert('Error', err.message || 'Network error'); }
@@ -244,7 +244,7 @@ export default function AuthScreen() {
                 provider: 'google',
                 options: { redirectTo: Platform.OS === 'web' ? window.location.origin : 'mobile://auth/callback' },
             });
-            if (error) showAlert('Google Sign In Failed', error.message);
+            if (error) showAlert('Google Sign In Failed', error?.message || 'Google sign in failed');
             if (data?.url && Platform.OS !== 'web') {
                 const { Linking } = require('react-native');
                 await Linking.openURL(data.url);

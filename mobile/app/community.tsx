@@ -3,8 +3,8 @@ import { Dimensions, Alert, ScrollView, RefreshControl, Linking } from 'react-na
 import { YStack, XStack, Text, Button, Spinner, useWindowDimensions } from 'tamagui';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCartStore } from '../../store/cartStore';
-import { supabase } from '../../lib/supabase';
+import { useCartStore } from '../store/cartStore';
+import { supabase } from '../lib/supabase';
 
 const COLORS = {
     bgDeep: '#0F1117',

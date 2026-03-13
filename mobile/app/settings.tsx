@@ -7,9 +7,9 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 
-import { supabase } from '../../lib/supabase';
-import { api } from '../../lib/api';
-import { COLORS } from '../../constants/Theme';
+import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
+import { COLORS } from '../constants/Theme';
 
 // Represents a single row in the settings menu
 const SettingsRow = ({ icon, title, subtitle, onPress, isDestructive = false, rightElement }: any) => (
@@ -58,7 +58,8 @@ export default function SettingsScreen() {
     }, []);
 
     const handleRateApp = () => {
-        Linking.openURL('https://apps.apple.com/app/apple-store/id000000000?mt=8').catch(() => {});
+        // TODO: Replace with actual App Store / Play Store IDs before release
+        Alert.alert('Coming Soon', 'Rating will be available once the app is published to the app stores.');
     };
 
     const handleShareApp = async () => {

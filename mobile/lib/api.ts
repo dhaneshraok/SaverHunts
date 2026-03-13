@@ -142,6 +142,9 @@ export const api = {
   forYouDeals: () =>
     apiFetch('/api/v1/deals/foryou', {}, { skipAuth: true, retries: 0, timeout: 8000 }),
 
+  todaysDeals: () =>
+    apiFetch('/api/v1/deals/todays', {}, { skipAuth: true, retries: 0, timeout: 8000 }),
+
   personalizedFeed: (userId: string, page = 0) =>
     apiFetch(`/api/v1/community/feed/personalized/${userId}?page=${page}`, {}, { retries: 0 }),
 
@@ -220,21 +223,76 @@ export const api = {
       body: JSON.stringify({ image_base64: imageBase64 }),
     }),
 
-  aiStylist: (userId: string) =>
+  aiStylist: (userId: string, occasion: string) =>
     apiFetch('/api/v1/ai/stylist', {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: userId, occasion }),
     }),
+
+  // === Wardrobe Management ===
+  wardrobeItems: (userId: string, category?: string) =>
+    apiFetch(`/api/v1/wardrobe/${userId}${category ? `?category=${category}` : ''}`),
+
+  wardrobeUpload: (userId: string, imageBase64: string) =>
+    apiFetch('/api/v1/wardrobe/upload', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, image_base64: imageBase64 }),
+    }, { timeout: 30000 }),
+
+  wardrobeUpdateItem: (itemId: string, updates: Record<string, any>) =>
+    apiFetch(`/api/v1/wardrobe/items/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+
+  wardrobeDeleteItem: (itemId: string) =>
+    apiFetch(`/api/v1/wardrobe/items/${itemId}`, { method: 'DELETE' }),
+
+  wardrobeOutfits: (userId: string) =>
+    apiFetch(`/api/v1/wardrobe/${userId}/outfits`),
+
+  wardrobeSaveOutfit: (data: { user_id: string; name: string; occasion?: string; item_ids: string[]; notes?: string }) =>
+    apiFetch('/api/v1/wardrobe/outfits', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  wardrobeDeleteOutfit: (outfitId: string) =>
+    apiFetch(`/api/v1/wardrobe/outfits/${outfitId}`, { method: 'DELETE' }),
+
+  wardrobeWearOutfit: (outfitId: string) =>
+    apiFetch(`/api/v1/wardrobe/outfits/${outfitId}/wear`, { method: 'POST' }),
+
+  wardrobeStats: (userId: string) =>
+    apiFetch(`/api/v1/wardrobe/${userId}/stats`, {}, { retries: 0, timeout: 8000 }),
+
+  wardrobeAiSuggest: (userId: string, occasion: string, weather?: string, mood?: string) =>
+    apiFetch('/api/v1/wardrobe/ai/suggest', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, occasion, weather, mood }),
+    }, { timeout: 30000 }),
+
+  wardrobeGapAnalysis: (userId: string) =>
+    apiFetch('/api/v1/wardrobe/ai/gap-analysis', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    }, { timeout: 30000 }),
 
   aiGroceryValue: (data: any) =>
     apiFetch('/api/v1/ai/grocery/value', { method: 'POST', body: JSON.stringify(data) }),
 
   // === Alerts ===
-  createAlert: (query: string, targetPrice: number, pushToken: string) =>
+  createAlert: (userId: string, query: string, targetPrice: number, currentPrice: number, platform?: string) =>
     apiFetch('/api/v1/alerts', {
       method: 'POST',
-      body: JSON.stringify({ query, target_price: targetPrice, push_token: pushToken }),
+      body: JSON.stringify({ user_id: userId, query, target_price: targetPrice, current_price: currentPrice, platform }),
     }),
+
+  getAlerts: (userId: string) =>
+    apiFetch(`/api/v1/alerts/${userId}`),
+
+  deleteAlert: (alertId: string, userId: string) =>
+    apiFetch(`/api/v1/alerts/${alertId}?user_id=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
 
   // === Grocery ===
   groceryLists: (userId: string) =>
@@ -366,6 +424,38 @@ export const api = {
 
   shareDeal: (data: any) =>
     apiFetch('/api/v1/community/deals', { method: 'POST', body: JSON.stringify(data) }),
+
+  // === Social Sharing with Deep Links ===
+  createShareLink: (userId: string, dealData: {
+    title: string;
+    price: number;
+    platform: string;
+    product_url?: string;
+    image_url?: string;
+  }) =>
+    apiFetch('/api/v1/share/deal', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, ...dealData }),
+    }),
+
+  resolveShareLink: (shareCode: string) =>
+    apiFetch(`/api/v1/share/${encodeURIComponent(shareCode)}`, {}, { skipAuth: true, retries: 0, timeout: 8000 }),
+
+  // === Analytics ===
+  trackEvent: (userId: string, eventType: string, query?: string, platform?: string, metadata?: Record<string, any>) =>
+    apiFetch('/api/v1/analytics/event', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId,
+        event_type: eventType,
+        ...(query !== undefined && { query }),
+        ...(platform !== undefined && { platform }),
+        ...(metadata !== undefined && { metadata }),
+      }),
+    }, { retries: 0, timeout: 5000 }),
+
+  getUserAnalytics: (userId: string) =>
+    apiFetch(`/api/v1/analytics/${userId}/summary`, {}, { retries: 0, timeout: 8000 }),
 };
 
 // ─── Polling Helper ──────────────────────────────────

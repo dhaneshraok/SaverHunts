@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 
 import { api } from '../lib/api';
-import { storage } from '../lib/storage';
+import { storage, userKey } from '../lib/storage';
 import { COLORS } from '../constants/Theme';
 
 const RECENT_SEARCHES_KEY = 'recentSearches';
@@ -33,7 +33,7 @@ interface SearchOverlayProps {
 }
 
 export function getRecentSearches(): string[] {
-  const raw = storage.getString(RECENT_SEARCHES_KEY);
+  const raw = storage.getString(userKey(RECENT_SEARCHES_KEY));
   if (!raw) return [];
   try { return JSON.parse(raw); } catch { return []; }
 }
@@ -43,11 +43,11 @@ export function addRecentSearch(query: string) {
   if (!q) return;
   const recent = getRecentSearches().filter(s => s.toLowerCase() !== q.toLowerCase());
   recent.unshift(q);
-  storage.set(RECENT_SEARCHES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+  storage.set(userKey(RECENT_SEARCHES_KEY), JSON.stringify(recent.slice(0, MAX_RECENT)));
 }
 
 export function clearRecentSearches() {
-  storage.delete(RECENT_SEARCHES_KEY);
+  storage.delete(userKey(RECENT_SEARCHES_KEY));
 }
 
 export default function SearchOverlay({ visible, query, onSelect, onClose }: SearchOverlayProps) {

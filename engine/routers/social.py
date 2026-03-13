@@ -1,15 +1,21 @@
 import logging
 import os
+import re
+import html
 import base64
 import uuid
 import math
+import string
+import secrets
 from datetime import datetime, timedelta
-from fastapi import APIRouter, status, Response
+from fastapi import APIRouter, Depends, Query, status, Response
 from pydantic import BaseModel
 from typing import Optional
+from app.utils.rate_limiter import rate_limit
+from app.utils.auth import get_current_user, get_optional_user, require_user_match, AuthUser
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Social"])
+router = APIRouter(prefix="/api/v1", tags=["Social"], dependencies=[Depends(rate_limit(60))])
 
 # ─── Tiered Group Buy Reward System ───────────────────
 # Cashback is funded by affiliate commissions (4-8% per sale).
@@ -30,6 +36,10 @@ def _calculate_tier(member_count: int):
 
 def _calculate_cashback(price_inr: float, member_count: int) -> dict:
     """Calculate tiered cashback for each member."""
+    # Guard against invalid prices
+    if not isinstance(price_inr, (int, float)) or price_inr <= 0:
+        price_inr = 0
+
     tier = _calculate_tier(member_count)
     if not tier:
         # Not enough members yet — show what they'd get at the first tier
@@ -101,7 +111,7 @@ async def post_community_deal(deal: CommunityDealRequest, response: Response):
         return {"message": "Deal shared successfully", "deal": res.data[0]}
     except Exception as e:
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 @router.get("/community/deals")
 async def get_community_deals(response: Response):
@@ -120,7 +130,7 @@ async def get_community_deals(response: Response):
         return {"status": "success", "data": res.data}
     except Exception as e:
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 @router.post("/community/deals/{deal_id}/upvote")
 async def upvote_community_deal(deal_id: str, response: Response):
@@ -137,7 +147,7 @@ async def upvote_community_deal(deal_id: str, response: Response):
         return {"message": "Upvoted successfully", "upvotes": new_votes}
     except Exception as e:
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 # --- Group Buys ---
 class GroupBuyRequest(BaseModel):
@@ -148,10 +158,14 @@ class GroupBuyRequest(BaseModel):
     image_url: Optional[str] = None
     platform: str
     url: Optional[str] = None
-    target_users_needed: int
+    target_users_needed: int  # validated in endpoint (>= 1)
 
 @router.post("/group-buys")
 async def create_group_buy(deal: GroupBuyRequest, response: Response):
+    if deal.target_users_needed < 1:
+        response.status_code = 400
+        return {"error": "target_users_needed must be at least 1"}
+
     from tasks.scrapers import supabase_client
     if not supabase_client:
         response.status_code = 503
@@ -173,7 +187,7 @@ async def create_group_buy(deal: GroupBuyRequest, response: Response):
     except Exception as e:
         logger.error(f"Failed to create group buy: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 @router.get("/group-buys")
 async def get_group_buys(response: Response):
@@ -193,27 +207,37 @@ async def get_group_buys(response: Response):
     except Exception as e:
         logger.error(f"Failed to fetch group buys: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 class JoinGroupBuyRequest(BaseModel):
     user_id: str
 
 @router.post("/group-buys/{group_id}/join")
-async def join_group_buy(group_id: str, req: JoinGroupBuyRequest, response: Response):
+async def join_group_buy(
+    group_id: str,
+    req: JoinGroupBuyRequest,
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
+    require_user_match(user, req.user_id)
     from tasks.scrapers import supabase_client
     if not supabase_client:
         response.status_code = 503
         return {"error": "Service unavailable"}
 
     try:
-        current = supabase_client.table("group_buys").select("current_users_joined, target_users_needed").eq("id", group_id).single().execute()
+        current = supabase_client.table("group_buys").select("current_users_joined, target_users_needed, status").eq("id", group_id).single().execute()
+        if current.data.get("status") != "active":
+            response.status_code = 400
+            return {"error": "Group buy is no longer active"}
+
         joined = current.data.get("current_users_joined") or []
         target = current.data.get("target_users_needed") or 5
 
-        if req.user_id in joined:
+        if user.id in joined:
             return {"message": "Already joined", "joined_count": len(joined)}
 
-        joined.append(req.user_id)
+        joined.append(user.id)
         updates = {"current_users_joined": joined}
 
         if len(joined) >= target:
@@ -225,7 +249,7 @@ async def join_group_buy(group_id: str, req: JoinGroupBuyRequest, response: Resp
     except Exception as e:
         logger.error(f"Failed to join group buy: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 # ═══════════════════════════════════════════════════════
@@ -245,7 +269,7 @@ async def get_group_buy_for_product(product_id: str, response: Response):
         res = supabase_client.table("group_buys")\
             .select("*")\
             .eq("status", "active")\
-            .ilike("product_title", f"%{product_id.replace('-', '%')}%")\
+            .ilike("product_title", f"%{product_id.replace('-', ' ').replace('%', '').replace('_', '')}%")\
             .order("created_at", desc=True)\
             .limit(1)\
             .execute()
@@ -264,7 +288,7 @@ async def get_group_buy_for_product(product_id: str, response: Response):
     except Exception as e:
         logger.error(f"Supabase group buy lookup failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
     # No active deal — return tier info so frontend can show "Start a Group Buy"
     return {
@@ -292,7 +316,7 @@ async def get_group_buy_details(group_id: str, response: Response):
     except Exception as e:
         logger.error(f"Supabase group buy detail failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
     if not deal:
         response.status_code = 404
@@ -324,9 +348,9 @@ async def get_group_buy_details(group_id: str, response: Response):
         "deal": {
             **deal,
             "member_count": member_count,
-            "members": [{"user_id": uid, "initial": uid[:2].upper()} for uid in joined],
+            "members": [{"user_id": uid, "initial": (uid[:2].upper() if isinstance(uid, str) and uid else "??")} for uid in joined if uid],
             "spots_left": max(0, target - member_count),
-            "progress_pct": min(100, round(member_count / target * 100)),
+            "progress_pct": min(100, round(member_count / max(target, 1) * 100)),
             "hours_left": round(hours_left, 1),
         },
         "reward": reward,
@@ -347,8 +371,13 @@ class CreateGroupBuyV2Request(BaseModel):
 
 
 @router.post("/group-buys/v2/create")
-async def create_group_buy_v2(req: CreateGroupBuyV2Request, response: Response):
-    """Create a group buy with tiered rewards. Creator auto-joins."""
+async def create_group_buy_v2(
+    req: CreateGroupBuyV2Request,
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Create a group buy with tiered rewards. Creator auto-joins. Requires auth."""
+    require_user_match(user, req.user_id)
     from tasks.scrapers import supabase_client
 
     if not supabase_client:
@@ -360,7 +389,7 @@ async def create_group_buy_v2(req: CreateGroupBuyV2Request, response: Response):
     target = req.target_size if req.target_size in valid_targets else 3
 
     deal_data = {
-        "user_id": req.user_id,
+        "user_id": user.id,
         "product_title": req.product_title,
         "price_inr": req.price_inr,
         "original_price_inr": req.original_price_inr,
@@ -368,7 +397,7 @@ async def create_group_buy_v2(req: CreateGroupBuyV2Request, response: Response):
         "platform": req.platform,
         "url": req.url,
         "target_users_needed": target,
-        "current_users_joined": [req.user_id],
+        "current_users_joined": [user.id],
         "status": "active",
     }
 
@@ -389,7 +418,7 @@ async def create_group_buy_v2(req: CreateGroupBuyV2Request, response: Response):
     except Exception as e:
         logger.error(f"Supabase create group buy v2 failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 class ConfirmPurchaseRequest(BaseModel):
@@ -397,8 +426,14 @@ class ConfirmPurchaseRequest(BaseModel):
 
 
 @router.post("/group-buys/{group_id}/confirm-purchase")
-async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, response: Response):
-    """Confirm a purchase within a group buy. Awards tiered cashback when all members purchase."""
+async def confirm_group_purchase(
+    group_id: str,
+    req: ConfirmPurchaseRequest,
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Confirm a purchase within a group buy. Awards tiered cashback when all members purchase. Requires auth."""
+    require_user_match(user, req.user_id)
     from tasks.scrapers import supabase_client
 
     if not supabase_client:
@@ -412,14 +447,19 @@ async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, res
     except Exception as e:
         logger.error(f"Supabase confirm purchase lookup failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
     if not deal:
         response.status_code = 404
         return {"error": "Group buy not found"}
 
+    # Prevent re-triggering completed or expired group buys
+    if deal.get("status") != "active":
+        response.status_code = 400
+        return {"error": f"Group buy is already {deal.get('status', 'closed')}"}
+
     joined = deal.get("current_users_joined") or []
-    if req.user_id not in joined:
+    if user.id not in joined:
         response.status_code = 400
         return {"error": "You must join the group buy first"}
 
@@ -428,18 +468,18 @@ async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, res
     if isinstance(confirmed, str):
         confirmed = confirmed.split(",") if confirmed else []
 
-    if req.user_id in confirmed:
+    if user.id in confirmed:
         return {"status": "success", "message": "Purchase already confirmed"}
 
-    confirmed.append(req.user_id)
+    confirmed.append(user.id)
     price = float(deal.get("price_inr", 0))
 
     # Check if all joined members have confirmed
     all_confirmed = len(confirmed) >= len(joined) and len(joined) >= (deal.get("target_users_needed", 3))
 
     if all_confirmed:
-        # Award tiered cashback to all members via wallet service
-        from services.wallet import credit_wallet as wallet_credit
+        # Create PENDING cashback for all members (held for 7 days before release)
+        from services.wallet import create_pending_cashback
         reward = _calculate_cashback(price, len(joined))
         cashback_amount = reward["cashback_per_person"]
 
@@ -449,32 +489,34 @@ async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, res
                 "confirmed_purchases": confirmed,
             }).eq("id", group_id).execute()
 
-            # Credit each member's wallet with idempotency protection
-            credit_results = []
+            # Create pending cashback for each member (idempotency-protected)
+            pending_results = []
             for uid in joined:
-                result = wallet_credit(
+                result = create_pending_cashback(
                     user_id=uid,
                     amount=cashback_amount,
                     reason="group_buy_cashback",
                     reference_id=group_id,
                 )
-                credit_results.append({"user_id": uid, "result": result["status"]})
+                pending_results.append({"user_id": uid, "result": result["status"]})
                 if result["status"] == "error":
-                    logger.error(f"Cashback credit failed for {uid}: {result.get('error')}")
+                    logger.error(f"Pending cashback failed for {uid}: {result.get('error')}")
 
         except Exception as e:
-            logger.error(f"Supabase cashback credit failed: {e}")
+            logger.error(f"Supabase cashback creation failed: {e}")
             response.status_code = 500
-            return {"error": str(e)}
+            return {"error": "An internal error occurred"}
 
         return {
             "status": "success",
-            "message": f"Group buy completed! ₹{cashback_amount} cashback credited to all {len(joined)} members!",
+            "message": f"Group buy completed! ₹{cashback_amount} cashback is pending for all {len(joined)} members. Submit your order ID to verify and receive cashback in 7 days.",
             "completed": True,
             "cashback_per_person": cashback_amount,
             "total_cashback": cashback_amount * len(joined),
+            "cashback_status": "pending",
+            "hold_days": 7,
             "reward": reward,
-            "credit_results": credit_results,
+            "pending_results": pending_results,
         }
     else:
         # Not all confirmed yet
@@ -485,7 +527,7 @@ async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, res
         except Exception as e:
             logger.error(f"Supabase update confirmed failed: {e}")
             response.status_code = 500
-            return {"error": str(e)}
+            return {"error": "An internal error occurred"}
 
         reward = _calculate_cashback(price, len(joined))
         return {
@@ -496,6 +538,92 @@ async def confirm_group_purchase(group_id: str, req: ConfirmPurchaseRequest, res
             "total_members": len(joined),
             "reward": reward,
         }
+
+
+# ═══════════════════════════════════════════════════════
+# ORDER VERIFICATION & PENDING CASHBACK
+# ═══════════════════════════════════════════════════════
+
+class VerifyOrderRequest(BaseModel):
+    order_id: str  # Order ID from the platform (e.g., Amazon order #)
+
+
+@router.post("/group-buys/{group_id}/verify-order")
+async def verify_order_for_cashback(
+    group_id: str,
+    req: VerifyOrderRequest,
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Submit an order ID to verify a purchase for pending cashback.
+    User provides their platform order ID (e.g., Amazon order number).
+    This marks the pending cashback as 'verified', which speeds up release.
+    """
+    from services.wallet import verify_pending_cashback
+    from tasks.scrapers import supabase_client
+
+    if not supabase_client:
+        response.status_code = 503
+        return {"error": "Service unavailable"}
+
+    if not req.order_id or not req.order_id.strip():
+        response.status_code = 400
+        return {"error": "order_id is required"}
+
+    # Sanitize order ID (alphanumeric + dashes, max 100 chars)
+    order_id = req.order_id.strip()[:100]
+
+    try:
+        # Find pending cashback for this user + group buy
+        result = supabase_client.table("pending_cashback") \
+            .select("id, status") \
+            .eq("user_id", user.id) \
+            .eq("reference_id", group_id) \
+            .single() \
+            .execute()
+
+        if not result.data:
+            response.status_code = 404
+            return {"error": "No pending cashback found for this group buy"}
+
+        pending = result.data
+        if pending["status"] == "released":
+            return {"status": "success", "message": "Cashback already released to your wallet"}
+        if pending["status"] == "rejected":
+            response.status_code = 400
+            return {"error": "Cashback was rejected"}
+
+        verify_result = verify_pending_cashback(pending["id"], order_id)
+
+        if verify_result["status"] == "success":
+            return {
+                "status": "success",
+                "message": "Order verified! Cashback will be released after the hold period.",
+                "verified": True,
+            }
+        else:
+            response.status_code = 400
+            return verify_result
+
+    except Exception as e:
+        logger.error(f"Order verification failed: {e}")
+        response.status_code = 500
+        return {"error": "An internal error occurred"}
+
+
+@router.get("/cashback/pending")
+async def get_my_pending_cashback(
+    response: Response,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Get all pending cashback for the authenticated user."""
+    from services.wallet import get_pending_cashback
+
+    result = get_pending_cashback(user.id)
+    if result["status"] == "error":
+        response.status_code = 500
+    return result
 
 
 @router.get("/group-buys/trending/active")
@@ -518,7 +646,7 @@ async def get_trending_group_buys(response: Response):
     except Exception as e:
         logger.error(f"Supabase trending group buys failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
     # Enrich with reward info and sort by member count
     enriched = []
@@ -607,7 +735,7 @@ async def create_legacy_group_deal(req: LegacyGroupDealCreateRequest, response: 
     except Exception as e:
         logger.error(f"Create legacy group deal failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 @router.get("/deals/group/{deal_id}")
@@ -626,7 +754,7 @@ async def get_legacy_group_deal(deal_id: str, response: Response):
     except Exception as e:
         logger.error(f"Get legacy group deal failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 @router.post("/deals/group/join")
@@ -653,44 +781,18 @@ async def join_legacy_group_deal(req: LegacyGroupDealJoinRequest, response: Resp
     except Exception as e:
         logger.error(f"Join legacy group deal failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 @router.post("/deals/group/simulate-purchase")
 async def simulate_legacy_group_purchase(req: LegacyGroupDealPurchaseRequest, response: Response):
-    from tasks.scrapers import supabase_client
-    if not supabase_client:
-        response.status_code = 503
-        return {"error": "Service unavailable"}
-
-    try:
-        supabase_client.table("group_deal_participants").update({"status": "purchased"}).eq("deal_id", req.deal_id).eq("user_id", req.user_id).execute()
-
-        participants_res = supabase_client.table("group_deal_participants").select("*").eq("deal_id", req.deal_id).execute()
-        participants = participants_res.data or []
-        purchased = [p for p in participants if p.get("status") == "purchased"]
-
-        target_count = 3
-        if len(purchased) >= target_count:
-            supabase_client.table("group_deals").update({"status": "completed"}).eq("id", req.deal_id).execute()
-
-            from services.wallet import credit_wallet as wallet_credit
-            for p in participants:
-                uid = p.get("user_id")
-                if not uid:
-                    continue
-                wallet_credit(
-                    user_id=uid,
-                    amount=150,
-                    reason="legacy_group_deal_cashback",
-                    reference_id=req.deal_id,
-                )
-
-        return {"status": "success", "message": "Purchase recorded successfully."}
-    except Exception as e:
-        logger.error(f"Simulate legacy group purchase failed: {e}")
-        response.status_code = 500
-        return {"error": str(e)}
+    """
+    DISABLED in production. This endpoint previously awarded hardcoded cashback
+    without any purchase verification. It remains as a stub to avoid breaking
+    clients that still call it.
+    """
+    response.status_code = 403
+    return {"status": "error", "error": "Purchase simulation is disabled. Use the V2 group buy flow with real purchase verification."}
 
 
 @router.get("/deals/group/user/{user_id}")
@@ -717,7 +819,7 @@ async def get_legacy_user_group_deals(user_id: str, response: Response):
     except Exception as e:
         logger.error(f"Get legacy user group deals failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 @router.get("/deals/trending")
@@ -733,7 +835,7 @@ async def get_trending_deals(response: Response):
     except Exception as e:
         logger.error(f"Get trending deals failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
 
 
 @router.get("/deals/foryou")
@@ -749,16 +851,46 @@ async def get_for_you_deals(response: Response):
     except Exception as e:
         logger.error(f"Get for-you deals failed: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
+
+
+@router.get("/deals/todays")
+async def get_todays_deals(response: Response, limit: int = Query(10, ge=1, le=100)):
+    """Return verified deals — real price drops confirmed against 30-day history."""
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 503
+        return {"error": "Service unavailable"}
+
+    try:
+        res = (
+            supabase_client.table("verified_deals")
+            .select("*")
+            .gt("expires_at", "now()")
+            .order("drop_percent", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return {"status": "success", "data": res.data or []}
+    except Exception as e:
+        logger.error(f"Get today's deals failed: {e}")
+        response.status_code = 500
+        return {"error": "An internal error occurred"}
+
 
 # --- Community AR Selfie Sharing ---
 class ARShareRequest(BaseModel):
     user_id: str
-    image_base64: str
+    image_base64: str  # validated in endpoint
     caption: str = "AR Try-On Look"
+
+MAX_IMAGE_BASE64_LEN = 15_000_000  # ~10MB decoded
 
 @router.post("/community/ar-share")
 async def share_ar_selfie(req: ARShareRequest, response: Response):
+    if len(req.image_base64) > MAX_IMAGE_BASE64_LEN:
+        response.status_code = 413
+        return {"error": "Image too large (max ~10MB)"}
     try:
         image_bytes = base64.b64decode(req.image_base64)
         file_name = f"ar-selfies/{req.user_id}/{uuid.uuid4().hex}.jpg"
@@ -808,4 +940,134 @@ async def share_ar_selfie(req: ARShareRequest, response: Response):
     except Exception as e:
         logger.error(f"AR share error: {e}")
         response.status_code = 500
-        return {"error": str(e)}
+        return {"error": "An internal error occurred"}
+
+
+# ═══════════════════════════════════════════════════════
+# SOCIAL SHARING WITH DEEP LINKS
+# ═══════════════════════════════════════════════════════
+
+SHARE_CODE_LENGTH = 8
+SHARE_CODE_ALPHABET = string.ascii_letters + string.digits
+
+def _generate_share_code() -> str:
+    """Generate a unique 8-char alphanumeric share code."""
+    return ''.join(secrets.choice(SHARE_CODE_ALPHABET) for _ in range(SHARE_CODE_LENGTH))
+
+
+class CreateShareLinkRequest(BaseModel):
+    user_id: str
+    title: str
+    price: float
+    platform: str
+    product_url: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+# Regex to validate share codes (alphanumeric only)
+_SHARE_CODE_RE = re.compile(r'^[a-zA-Z0-9]+$')
+
+
+@router.post("/share/deal")
+async def create_share_link(req: CreateShareLinkRequest, response: Response):
+    """Create a shareable deep link for a deal."""
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 503
+        return {"error": "Service unavailable"}
+
+    # Input validation
+    if not req.user_id or not req.user_id.strip():
+        response.status_code = 400
+        return {"error": "user_id is required"}
+    if not req.title or not req.title.strip():
+        response.status_code = 400
+        return {"error": "title is required"}
+    if req.price <= 0:
+        response.status_code = 400
+        return {"error": "price must be positive"}
+
+    # Sanitize text inputs
+    safe_title = html.escape(req.title.strip()[:200])
+    safe_platform = html.escape(req.platform.strip()[:50]) if req.platform else "Unknown"
+
+    share_code = _generate_share_code()
+
+    try:
+        res = supabase_client.table("shared_deals").insert({
+            "share_code": share_code,
+            "sharer_user_id": req.user_id.strip(),
+            "title": safe_title,
+            "price_inr": req.price,
+            "platform": safe_platform,
+            "product_url": req.product_url[:500] if req.product_url else None,
+            "image_url": req.image_url[:500] if req.image_url else None,
+        }).execute()
+
+        if not res.data:
+            response.status_code = 500
+            return {"error": "Failed to create share link"}
+
+        share_url = f"saverhunt://share/{share_code}"
+
+        return {
+            "status": "success",
+            "share_id": res.data[0]["id"],
+            "share_code": share_code,
+            "share_url": share_url,
+        }
+    except Exception as e:
+        logger.error(f"Create share link failed: {e}")
+        response.status_code = 500
+        return {"error": "Failed to create share link"}
+
+
+@router.get("/share/{share_code}")
+async def resolve_share_link(share_code: str, response: Response):
+    """Resolve a shared deal by its share code. Increments view count."""
+    from tasks.scrapers import supabase_client
+    if not supabase_client:
+        response.status_code = 503
+        return {"error": "Service unavailable"}
+
+    # Validate share code format (prevent injection)
+    if not share_code or len(share_code) > 20 or not _SHARE_CODE_RE.match(share_code):
+        response.status_code = 400
+        return {"error": "Invalid share code format"}
+
+    try:
+        res = supabase_client.table("shared_deals")\
+            .select("*")\
+            .eq("share_code", share_code)\
+            .single()\
+            .execute()
+
+        deal = res.data
+        if not deal:
+            response.status_code = 404
+            return {"error": "Shared deal not found"}
+
+        # Increment view count
+        new_views = (deal.get("views") or 0) + 1
+        supabase_client.table("shared_deals")\
+            .update({"views": new_views})\
+            .eq("share_code", share_code)\
+            .execute()
+
+        return {
+            "status": "success",
+            "data": {
+                "title": deal.get("title", ""),
+                "price_inr": deal.get("price_inr", 0),
+                "platform": deal.get("platform", "Unknown"),
+                "product_url": deal.get("product_url"),
+                "image_url": deal.get("image_url"),
+                "sharer_user_id": deal.get("sharer_user_id"),
+                "views": new_views,
+                "created_at": deal.get("created_at"),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Resolve share link failed: {e}")
+        response.status_code = 500
+        return {"error": "Failed to resolve share link"}

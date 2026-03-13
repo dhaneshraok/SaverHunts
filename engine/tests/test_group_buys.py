@@ -9,6 +9,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
+from tests.helpers import auth_headers
 
 
 @pytest.fixture
@@ -68,7 +69,7 @@ def test_create_group_buy_v2(client):
             "price_inr": 79999,
             "platform": "Amazon",
             "target_size": 5,
-        })
+        }, headers=auth_headers("creator1"))
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -100,7 +101,7 @@ def test_create_group_buy_v2_invalid_target(client):
             "price_inr": 1000,
             "platform": "Amazon",
             "target_size": 7,  # Not a valid tier
-        })
+        }, headers=auth_headers("creator1"))
         assert response.status_code == 200
 
 
@@ -114,7 +115,7 @@ def test_create_group_buy_v2_503(client):
             "price_inr": 1000,
             "platform": "Amazon",
             "target_size": 3,
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 503
 
 
@@ -132,6 +133,7 @@ def test_join_group_buy(client):
             chain.single.return_value.execute.return_value = SimpleNamespace(data={
                 "current_users_joined": ["creator1"],
                 "target_users_needed": 3,
+                "status": "active",
             })
             call_count[0] = 1
         else:
@@ -144,7 +146,7 @@ def test_join_group_buy(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/join", json={
             "user_id": "joiner1",
-        })
+        }, headers=auth_headers("joiner1"))
         assert response.status_code == 200
         data = response.json()
         assert data["joined_count"] == 2
@@ -160,6 +162,7 @@ def test_join_group_buy_already_joined(client):
         chain.single.return_value.execute.return_value = SimpleNamespace(data={
             "current_users_joined": ["creator1", "joiner1"],
             "target_users_needed": 3,
+            "status": "active",
         })
         return chain
 
@@ -168,7 +171,7 @@ def test_join_group_buy_already_joined(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/join", json={
             "user_id": "joiner1",
-        })
+        }, headers=auth_headers("joiner1"))
         assert response.status_code == 200
         data = response.json()
         assert "Already joined" in data["message"]
@@ -185,6 +188,7 @@ def test_join_group_buy_fulfills(client):
             chain.single.return_value.execute.return_value = SimpleNamespace(data={
                 "current_users_joined": ["user1", "user2"],
                 "target_users_needed": 3,
+                "status": "active",
             })
             call_count[0] = 1
         else:
@@ -196,7 +200,7 @@ def test_join_group_buy_fulfills(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/join", json={
             "user_id": "user3",
-        })
+        }, headers=auth_headers("user3"))
         assert response.status_code == 200
         data = response.json()
         assert data["joined_count"] == 3
@@ -227,6 +231,7 @@ def test_confirm_purchase_partial(client):
                 "target_users_needed": 3,
                 "confirmed_purchases": [],
                 "price_inr": 1000,
+                "status": "active",
             })
         else:
             # Second call: update confirmed_purchases
@@ -238,7 +243,7 @@ def test_confirm_purchase_partial(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/confirm-purchase", json={
             "user_id": "user1",
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 200
         data = response.json()
         assert data["completed"] is False
@@ -258,6 +263,7 @@ def test_confirm_purchase_already_confirmed(client):
             "target_users_needed": 3,
             "confirmed_purchases": ["user1"],
             "price_inr": 1000,
+            "status": "active",
         })
         return chain
 
@@ -266,7 +272,7 @@ def test_confirm_purchase_already_confirmed(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/confirm-purchase", json={
             "user_id": "user1",
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 200
         assert "already confirmed" in response.json()["message"].lower()
 
@@ -283,6 +289,7 @@ def test_confirm_purchase_not_member(client):
             "target_users_needed": 3,
             "confirmed_purchases": [],
             "price_inr": 1000,
+            "status": "active",
         })
         return chain
 
@@ -291,7 +298,7 @@ def test_confirm_purchase_not_member(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/gb-001/confirm-purchase", json={
             "user_id": "outsider",
-        })
+        }, headers=auth_headers("outsider"))
         assert response.status_code == 400
 
 
@@ -317,6 +324,7 @@ def test_confirm_purchase_completes_and_credits(client):
                 "target_users_needed": 3,
                 "confirmed_purchases": ["user1", "user2"],  # user3 will be the final one
                 "price_inr": 1000,
+                "status": "active",
             })
         else:
             # Subsequent calls: updates
@@ -326,20 +334,21 @@ def test_confirm_purchase_completes_and_credits(client):
     mock_sb.table = MagicMock(side_effect=table_fn)
 
     with patch("tasks.scrapers.supabase_client", mock_sb), \
-         patch("services.wallet.credit_wallet") as mock_credit:
-        mock_credit.return_value = {"status": "success", "balance": 20, "credited": 20, "transaction_id": "tx1"}
+         patch("services.wallet.create_pending_cashback") as mock_pending:
+        mock_pending.return_value = {"status": "success", "pending_id": "p1", "amount": 20, "hold_until": "2026-03-18T00:00:00+00:00"}
 
         response = client.post("/api/v1/group-buys/gb-001/confirm-purchase", json={
             "user_id": "user3",
-        })
+        }, headers=auth_headers("user3"))
         assert response.status_code == 200
         data = response.json()
         assert data["completed"] is True
         assert data["cashback_per_person"] == 20  # 2% of 1000
+        assert data["cashback_status"] == "pending"
 
-        # Verify wallet service was called for each member
-        assert mock_credit.call_count == 3
-        for call in mock_credit.call_args_list:
+        # Verify pending cashback was created for each member
+        assert mock_pending.call_count == 3
+        for call in mock_pending.call_args_list:
             assert call.kwargs["reason"] == "group_buy_cashback"
             assert call.kwargs["reference_id"] == "gb-001"
             assert call.kwargs["amount"] == 20
@@ -359,7 +368,7 @@ def test_confirm_purchase_404(client):
     with patch("tasks.scrapers.supabase_client", mock_sb):
         response = client.post("/api/v1/group-buys/nonexistent/confirm-purchase", json={
             "user_id": "user1",
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 404
 
 

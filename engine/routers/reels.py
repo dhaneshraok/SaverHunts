@@ -13,10 +13,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from app.utils.rate_limiter import rate_limit
 
 from services.personalization import (
     build_personalized_feed,
@@ -26,7 +27,7 @@ from services.personalization import (
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit(120))])
 
 # ---------------------------------------------------------------------------
 # Supabase client
@@ -183,7 +184,12 @@ async def get_trending_reels(
                 for row in rows:
                     original = row.get("original_price_inr") or row.get("price_inr", 0)
                     current = row.get("price_inr", 0)
-                    discount = round(((original - current) / original) * 100) if original > current > 0 else 0
+                    try:
+                        original = float(original) if original else 0
+                        current = float(current) if current else 0
+                    except (ValueError, TypeError):
+                        original, current = 0, 0
+                    discount = round(((original - current) / original) * 100) if original > 0 and current > 0 and original > current else 0
                     trending.append({
                         "product_title": row.get("product_title", ""),
                         "price_inr": current,
@@ -206,6 +212,7 @@ async def get_trending_reels(
 # ---------------------------------------------------------------------------
 
 # In-memory reel metadata cache (populated on first feed build)
+_REEL_META_CACHE_MAX = 5000
 _reel_meta_cache: dict[str, dict] = {}
 
 
@@ -219,7 +226,14 @@ def _lookup_reel_metadata(reel_id: str) -> dict:
 
 
 def cache_reel_metadata(reels: list[dict]) -> None:
-    """Cache reel metadata for interaction lookups."""
+    """Cache reel metadata for interaction lookups. Evicts oldest entries when full."""
+    # Evict oldest entries if cache is full
+    overflow = len(_reel_meta_cache) + len(reels) - _REEL_META_CACHE_MAX
+    if overflow > 0:
+        keys_to_remove = list(_reel_meta_cache.keys())[:overflow]
+        for k in keys_to_remove:
+            del _reel_meta_cache[k]
+
     for reel in reels:
         rid = reel.get("id")
         if not rid:

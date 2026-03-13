@@ -83,6 +83,41 @@ function createNativeStorage(): Storage {
 export const storage: Storage =
     Platform.OS === 'web' ? createWebStorage() : createNativeStorage();
 
+// ─── Per-Account Scoping ─────────────────────────────
+// Keys that should be unique per user account, not shared across the device
+let _currentUserId: string | null = null;
+
+const USER_SCOPED_KEYS = [
+    'onboardingCategories',
+    'recentlyViewedProducts',
+    'searchHistory',
+    'recentSearches',
+];
+
+/** Call when user signs in to scope storage to their account. */
+export function setCurrentUser(userId: string) {
+    _currentUserId = userId;
+}
+
+/** Call on sign-out to reset scoping. */
+export function clearCurrentUser() {
+    _currentUserId = null;
+}
+
+/** Returns the scoped key for user-specific data. */
+export function userKey(key: string): string {
+    if (_currentUserId) return `${_currentUserId}:${key}`;
+    return key;
+}
+
+/** Clear all user-specific storage keys for the current user (call before sign-out). */
+export async function clearUserData() {
+    if (!_currentUserId) return;
+    for (const key of USER_SCOPED_KEYS) {
+        storage.delete(userKey(key));
+    }
+}
+
 // ─── Recently Viewed Products ────────────────────────
 const RECENTLY_VIEWED_KEY = 'recentlyViewedProducts';
 const MAX_RECENTLY_VIEWED = 20;
@@ -98,7 +133,7 @@ export interface RecentProduct {
 }
 
 export function getRecentlyViewed(): RecentProduct[] {
-    const raw = storage.getString(RECENTLY_VIEWED_KEY);
+    const raw = storage.getString(userKey(RECENTLY_VIEWED_KEY));
     if (!raw) return [];
     try { return JSON.parse(raw); } catch { return []; }
 }
@@ -109,7 +144,7 @@ export function addRecentlyViewed(product: Omit<RecentProduct, 'viewedAt'>) {
         p => p.slug !== product.slug
     );
     items.unshift({ ...product, viewedAt: Date.now() });
-    storage.set(RECENTLY_VIEWED_KEY, JSON.stringify(items.slice(0, MAX_RECENTLY_VIEWED)));
+    storage.set(userKey(RECENTLY_VIEWED_KEY), JSON.stringify(items.slice(0, MAX_RECENTLY_VIEWED)));
 }
 
 // ─── Search History (for personalization) ────────────
@@ -123,7 +158,7 @@ interface SearchEntry {
 }
 
 export function getSearchHistory(): SearchEntry[] {
-    const raw = storage.getString(SEARCH_HISTORY_KEY);
+    const raw = storage.getString(userKey(SEARCH_HISTORY_KEY));
     if (!raw) return [];
     try { return JSON.parse(raw); } catch { return []; }
 }
@@ -133,7 +168,7 @@ export function addSearchEntry(query: string, category?: string) {
     if (!q) return;
     const entries = getSearchHistory();
     entries.unshift({ query: q, category, timestamp: Date.now() });
-    storage.set(SEARCH_HISTORY_KEY, JSON.stringify(entries.slice(0, MAX_SEARCH_HISTORY)));
+    storage.set(userKey(SEARCH_HISTORY_KEY), JSON.stringify(entries.slice(0, MAX_SEARCH_HISTORY)));
 }
 
 export function getTopSearchCategories(limit = 3): string[] {

@@ -10,6 +10,7 @@ import json
 from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
+from tests.helpers import auth_headers
 
 
 # ─── App Setup ───────────────────────────────────────
@@ -140,7 +141,7 @@ def test_get_wallet_creates_if_missing(client):
     mock_sb.table = MagicMock(side_effect=table_fn)
 
     with patch("tasks.scrapers.supabase_client", mock_sb):
-        response = client.get("/api/v1/wallet/new-user")
+        response = client.get("/api/v1/wallet/new-user", headers=auth_headers("new-user"))
         # Should return wallet data (either existing or newly created)
         assert response.status_code in (200, 500)
 
@@ -156,7 +157,7 @@ def test_get_wallet_existing(client):
     mock_sb.table = MagicMock(side_effect=table_fn)
 
     with patch("tasks.scrapers.supabase_client", mock_sb):
-        response = client.get("/api/v1/wallet/user1")
+        response = client.get("/api/v1/wallet/user1", headers=auth_headers("user1"))
         assert response.status_code == 200
         data = response.json()
         assert data["balance"] == 250.50
@@ -165,7 +166,7 @@ def test_get_wallet_existing(client):
 def test_get_wallet_503_when_supabase_down(client):
     """GET /api/v1/wallet/{user_id} returns 503 when Supabase unavailable."""
     with patch("tasks.scrapers.supabase_client", None):
-        response = client.get("/api/v1/wallet/user1")
+        response = client.get("/api/v1/wallet/user1", headers=auth_headers("user1"))
         assert response.status_code == 503
 
 
@@ -180,10 +181,9 @@ def test_credit_wallet_endpoint(client):
             "transaction_id": "tx-123",
         }
         response = client.post("/api/v1/wallet/credit", json={
-            "user_id": "user1",
             "amount": 50.0,
             "reason": "Grocery savings",
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -200,7 +200,7 @@ def test_get_wallet_transactions(client):
             ],
             "count": 1,
         }
-        response = client.get("/api/v1/wallet/user1/transactions")
+        response = client.get("/api/v1/wallet/user1/transactions", headers=auth_headers("user1"))
         assert response.status_code == 200
         data = response.json()
         assert data["count"] == 1
@@ -312,11 +312,10 @@ def test_get_comments(client):
 def test_post_comment_awards_tokens(client):
     """POST /api/v1/comments/{deal_id} creates comment and awards 5 SVR."""
     mock_sb = MagicMock()
-    inserted_tables = []
+    token_tx_call_count = [0]
 
     def table_fn(name):
         chain = _make_chain()
-        inserted_tables.append(name)
 
         if name == "deal_comments":
             chain.insert.return_value.execute.return_value = _mock_supabase_result(
@@ -327,7 +326,16 @@ def test_post_comment_awards_tokens(client):
                 data={"auth_id": "user1", "saver_tokens": 10}
             )
         elif name == "token_transactions":
-            chain.insert.return_value.execute.return_value = _mock_supabase_result(data=[{"id": "tt1"}])
+            token_tx_call_count[0] += 1
+            if token_tx_call_count[0] == 1:
+                # First call: dedup check → no existing tokens for this deal
+                chain.execute.return_value = _mock_supabase_result(data=[])
+            elif token_tx_call_count[0] == 2:
+                # Second call: daily cap check
+                chain.execute.return_value = _mock_supabase_result(data=[], count=0)
+            else:
+                # Third call: insert token transaction
+                chain.insert.return_value.execute.return_value = _mock_supabase_result(data=[{"id": "tt1"}])
         return chain
 
     mock_sb.table = MagicMock(side_effect=table_fn)
@@ -491,7 +499,7 @@ def test_toggle_premium(client):
             "user_id": "user1",
             "is_premium": True,
             "plan": "pro_annual",
-        })
+        }, headers=auth_headers("user1"))
         assert response.status_code == 200
         data = response.json()
         assert data["is_premium"] is True
@@ -556,22 +564,47 @@ def test_for_you_deals(client):
 # ─── Rate Limiting ───────────────────────────────────
 
 def test_rate_limit_enforced(client):
-    """Requests beyond rate limit return 429."""
+    """Requests beyond rate limit return 429 via sliding-window middleware."""
     from main import app
-    # Simulate rate limit exceeded
-    app.state.redis.incr = AsyncMock(return_value=200)
+    # Mock the Redis pipeline to simulate exceeding the limit:
+    # pipeline.execute() returns [zremrangebyscore, zadd, zcard=201, expire]
+    mock_pipeline = MagicMock()
+    mock_pipeline.zremrangebyscore = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.zadd = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.zcard = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.expire = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.execute = AsyncMock(return_value=[0, 1, 201, True])
+
+    mock_redis = MagicMock()
+    mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+    mock_redis.zrange = AsyncMock(return_value=[])
+
+    original_redis = app.state.redis
+    app.state.redis = mock_redis
 
     response = client.post("/api/v1/search", json={"query": "test"})
     assert response.status_code == 429
 
-    # Reset
-    app.state.redis.incr = AsyncMock(return_value=1)
+    app.state.redis = original_redis
 
 
 def test_rate_limit_skips_health(client):
     """Health check is never rate limited."""
     from main import app
-    app.state.redis.incr = AsyncMock(return_value=9999)
+    # Even with a mock that would trigger limits, health should pass
+    mock_pipeline = MagicMock()
+    mock_pipeline.zremrangebyscore = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.zadd = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.zcard = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.expire = MagicMock(return_value=mock_pipeline)
+    mock_pipeline.execute = AsyncMock(return_value=[0, 1, 9999, True])
+
+    mock_redis = MagicMock()
+    mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+    mock_redis.zrange = AsyncMock(return_value=[])
+
+    original_redis = app.state.redis
+    app.state.redis = mock_redis
 
     with patch("main.celery_app") as mock_celery:
         mock_celery.control.ping.return_value = [{}]
@@ -579,4 +612,4 @@ def test_rate_limit_skips_health(client):
             response = client.get("/health")
             assert response.status_code == 200
 
-    app.state.redis.incr = AsyncMock(return_value=1)
+    app.state.redis = original_redis

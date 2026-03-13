@@ -2,13 +2,14 @@ import logging
 import os
 import base64
 import json
-from fastapi import APIRouter, status, Response, Request
+from fastapi import APIRouter, Depends, status, Response, Request
 from pydantic import BaseModel
+from app.utils.rate_limiter import rate_limit
 from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Receipts"])
+router = APIRouter(prefix="/api/v1", tags=["Receipts"], dependencies=[Depends(rate_limit(5))])
 
 class ReceiptScanRequest(BaseModel):
     user_id: str

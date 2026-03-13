@@ -12,6 +12,10 @@ class ProductResult(BaseModel):
     discount_percent: Optional[float] = None
     rating: Optional[float] = None
     is_fake_sale: bool = False
+    is_affiliate: bool = False
+    trust_score: Optional[int] = None
+    trust_label: Optional[str] = None
+    is_verified_deal: bool = False
 
 
 class BestPrice(BaseModel):

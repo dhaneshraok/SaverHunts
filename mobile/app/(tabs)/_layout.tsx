@@ -121,14 +121,6 @@ export default function TabLayout() {
           }}
         />
 
-        {/* ── Hidden tabs (still exist as files, but not shown in tab bar) ── */}
-        <Tabs.Screen name="grocery" options={{ href: null }} />
-        <Tabs.Screen name="feed" options={{ href: null }} />
-        <Tabs.Screen name="leaderboard" options={{ href: null }} />
-        <Tabs.Screen name="wardrobe" options={{ href: null }} />
-        <Tabs.Screen name="gift-concierge" options={{ href: null }} />
-        <Tabs.Screen name="settings" options={{ href: null }} />
-        <Tabs.Screen name="community" options={{ href: null }} />
       </Tabs>
 
       {/* Scanner Modal */}
